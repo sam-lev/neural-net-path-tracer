@@ -1,0 +1,168 @@
+//============================================================================
+//  Copyright (c) Kitware, Inc.
+//  All rights reserved.
+//  See LICENSE.txt for details.
+//  This software is distributed WITHOUT ANY WARRANTY; without even
+//  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+//  PURPOSE.  See the above copyright notice for more information.
+//
+//  Copyright 2016 National Technology & Engineering Solutions of Sandia, LLC (NTESS).
+//  Copyright 2016 UT-Battelle, LLC.
+//  Copyright 2016 Los Alamos National Security.
+//
+//  Under the terms of Contract DE-NA0003525 with NTESS,
+//  the U.S. Government retains certain rights in this software.
+//
+//  Under the terms of Contract DE-AC52-06NA25396 with Los Alamos National
+//  Laboratory (LANL), the U.S. Government retains certain rights in
+//  this software.
+//============================================================================
+
+#include "MapperQuadAlbedo.h"
+
+#include <vtkm/cont/Timer.h>
+#include <vtkm/cont/TryExecute.h>
+
+#include <vtkm/rendering/CanvasRayTracer.h>
+#include <vtkm/rendering/Cylinderizer.h>
+#include <vtkm/rendering/raytracing/Camera.h>
+#include <vtkm/rendering/raytracing/Logger.h>
+#include <vtkm/rendering/raytracing/QuadExtractor.h>
+#include "raytracing/OrigQuadIntersector.h"
+#include "raytracing/RayTracerAlbedo.h"
+#include <pathtracing/RayOperations.h>
+
+namespace path
+{
+namespace rendering
+{
+
+struct MapperQuadAlbedo::InternalsType
+{
+  vtkm::rendering::CanvasRayTracer* Canvas;
+  vtkm::rendering::raytracing::RayTracerAlbedo Tracer;
+  vtkm::rendering::raytracing::Camera RayCamera;
+  vtkm::rendering::raytracing::Ray<vtkm::Float32> Rays;
+  bool CompositeBackground;
+  VTKM_CONT
+  InternalsType()
+    : Canvas(nullptr)
+    , CompositeBackground(true)
+  {
+  }
+};
+
+MapperQuadAlbedo::MapperQuadAlbedo()
+  : Internals(new InternalsType)
+{
+  MapCanvas = false;
+}
+
+MapperQuadAlbedo::~MapperQuadAlbedo()
+{
+}
+
+void MapperQuadAlbedo::SetCanvas(vtkm::rendering::Canvas* canvas)
+{
+  if (canvas != nullptr)
+  {
+    this->Internals->Canvas = dynamic_cast<vtkm::rendering::CanvasRayTracer*>(canvas);
+    if (this->Internals->Canvas == nullptr)
+    {
+      throw vtkm::cont::ErrorBadValue("Ray Tracer: bad canvas type. Must be CanvasRayTracer");
+    }
+  }
+  else
+  {
+    this->Internals->Canvas = nullptr;
+  }
+}
+
+vtkm::rendering::Canvas* MapperQuadAlbedo::GetCanvas() const
+{
+  return this->Internals->Canvas;
+}
+
+void MapperQuadAlbedo::RenderCells(const vtkm::cont::DynamicCellSet& cellset,
+                             const vtkm::cont::CoordinateSystem& coords,
+                             const vtkm::cont::Field& scalarField,
+                             const vtkm::cont::ColorTable& vtkmNotUsed(colorTable),
+                             const vtkm::rendering::Camera& camera,
+                             const vtkm::Range& scalarRange)
+{
+  vtkm::rendering::raytracing::Logger* logger = vtkm::rendering::raytracing::Logger::GetInstance();
+  logger->OpenLogEntry("mapper_ray_tracer");
+  vtkm::cont::Timer<> tot_timer;
+  vtkm::cont::Timer<> timer;
+
+
+  //
+  // Add supported shapes
+  //
+  vtkm::Bounds shapeBounds;
+  vtkm::rendering::raytracing::QuadExtractor quadExtractor;
+  quadExtractor.ExtractCells(cellset);
+  if (quadExtractor.GetNumberOfQuads() > 0)
+  {
+    vtkm::rendering::raytracing::OrigQuadIntersector* quadIntersector = new vtkm::rendering::raytracing::OrigQuadIntersector();
+    quadIntersector->SetData(coords, quadExtractor.GetQuadIds());
+    this->Internals->Tracer.AddShapeIntersector(quadIntersector);
+    shapeBounds.Include(quadIntersector->GetShapeBounds());
+  }
+
+  //
+  // Create rays
+  //
+  vtkm::rendering::raytracing::Camera& cam = this->Internals->Tracer.GetCamera();
+  cam.SetParameters(camera, *this->Internals->Canvas);
+  this->Internals->RayCamera.SetParameters(camera, *this->Internals->Canvas);
+
+  this->Internals->RayCamera.CreateRays(this->Internals->Rays, shapeBounds);
+  this->Internals->Rays.Buffers.at(0).InitConst(0.f);
+  if (MapCanvas)
+    vtkm::rendering::pathtracing::RayOperations::MapCanvasToRays(
+      this->Internals->Rays, camera, *this->Internals->Canvas);
+
+
+
+  this->Internals->Tracer.SetField(scalarField, scalarRange);
+
+  this->Internals->Tracer.SetColorMap(this->ColorMap);
+  this->Internals->Tracer.Render(this->Internals->Rays);
+
+  timer.Reset();
+  this->Internals->Canvas->WriteToCanvas(
+    this->Internals->Rays, this->Internals->Rays.Buffers.at(0).Buffer, camera);
+
+  if (this->Internals->CompositeBackground)
+  {
+    this->Internals->Canvas->BlendBackground();
+  }
+
+  vtkm::Float64 time = timer.GetElapsedTime();
+  logger->AddLogData("write_to_canvas", time);
+  time = tot_timer.GetElapsedTime();
+  logger->CloseLogEntry(time);
+}
+
+void MapperQuadAlbedo::SetCompositeBackground(bool on)
+{
+  this->Internals->CompositeBackground = on;
+}
+
+void MapperQuadAlbedo::StartScene()
+{
+  // Nothing needs to be done.
+}
+
+void MapperQuadAlbedo::EndScene()
+{
+  // Nothing needs to be done.
+}
+
+vtkm::rendering::Mapper* MapperQuadAlbedo::NewCopy() const
+{
+  return new path::rendering::MapperQuadAlbedo(*this);
+}
+}
+} // vtkm::rendering

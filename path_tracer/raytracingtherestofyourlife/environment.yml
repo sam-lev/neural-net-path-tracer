@@ -1,0 +1,13 @@
+
+name: raytracingfortherestofyourlife
+
+channels:
+  - conda-forge
+  - m-kim
+
+dependencies:
+  - lodepng
+  - xeus-cling
+  - notebook
+  - xplot
+  - vtkmxeusrender
