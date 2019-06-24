@@ -1,1 +1,3 @@
 # Conditional Generative Advisarial Network Path Tracer
+
+Conditional generative advisarial network (cGAN)  able to reproduce path traced, scene dependent, renderings given conditional rendering image buffers such as depth buffer, direct lighting, normal buffer and albedo capable of global illumination. The cGAN architecture is a U-Net commonly used in segmentation and is modeled after Manu Thomas and Angus Forbes's DeepIllumination (https://arxiv.org/abs/1710.09834). The path/ray tracer is implemented in VTK-m by Mark Kim and follows the design explained by Peter Shirley in 'Ray Tracing// The Rest of Your Life". 
