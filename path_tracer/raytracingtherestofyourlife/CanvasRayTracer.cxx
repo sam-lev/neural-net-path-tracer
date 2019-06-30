@@ -100,7 +100,7 @@ public:
 
     vtkm::Float32 depth = newpoint[2];
 
-    vtkm::Float32 re_scale = (555.f * vtkm::Abs(555.f - (961.3f*depth +555.f*depth - 961.3f)))/10.f;//785
+    vtkm::Float32 re_scale = (555.f * vtkm::Abs(555.f - (785.3f*depth +555.f*depth - 785.3f)))/10.f;
 
     depth = 0.5f*re_scale + .5f;// vtkm::Abs((depth - 0.99999f) / (.9999999f - 0.99999f)); //0.25f * vtkm::Exp(-0.5f * (depth) ) ;// 0.25f * vtkm::Exp((depth) / (800.0f )) + 0.5f;//nonlinearly_scaled_depth(depth);//0.5f * (depth) + 0.5f;
 

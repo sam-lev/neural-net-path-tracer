@@ -1,5 +1,5 @@
 //==================================================================================================
-// Written in 2019 by Mark Kim
+// Written in 2019 by Mark Kim (and barely anything from a kid named sam)
 //
 // To the extent possible under law, the author(s) have dedicated all copyright and related and
 // neighboring rights to this software to the public domain worldwide. This software is distributed
@@ -8,6 +8,7 @@
 // You should have received a copy (see file COPYING.txt) of the CC0 Public Domain Dedication along
 // with this software. If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 //==================================================================================================
+
 
 #include <iostream>
 #include <limits>
@@ -41,13 +42,14 @@
 
 #include <algorithm>
 
-
-/*
 // to allow python binding
 #include "pybind11/include/pybind11/pybind11.h"
+#include <pybind11/include/pybind11/stl.h> //for conversion to python type
+
+//for groups of vectors to pass to python
+#include <array>
 
 namespace py = pybind11;
-
 
 using ArrayType = vtkm::cont::ArrayHandle<vec3>;
 
@@ -339,11 +341,161 @@ vtkm::cont::ArrayHandleCompositeVector<
     return attenuation;
 }
 
+struct rbg{
+    std::vector<int> r;
+    std::vector<int> b;
+    std::vector<int> g;
+    std::vector<int> alpha;
+};
+
+template<typename ValueType>
+void passMatrix(std::vector<std::vector<int>> &buffer,
+          int samplecount,
+          ValueType &col);
+
+template<typename ValueType>
+std::vector<std::vector<int>> passMatrix(std::vector<std::vector<int>> buffer,
+          int samplecount,
+          ValueType &col);
+
+
+template<typename ValueType>
+std::vector<std::vector<int>> passMatrix(std::vector<std::vector<int>> &buffer,
+          int samplecount,
+          ValueType &col);
+
+//template<typename ValueType>
+std::vector<std::vector<int>> passMatrix(std::vector<std::vector<int>> &buffer,
+          int samplecount,
+          vtkm::Vec<vtkm::Float32,4>  &col);
+
+//decide to do casting transform for 255-rbg no or
+// within pythion
+//template<>
+std::vector<std::vector<int>> passMatrix(std::vector<std::vector<int>> &buffer,
+          int samplecount,
+          vtkm::Vec<vtkm::Float32,4> &col)
+{
+  //std::vector<int> buffer_r = buffer.r;
+  //std::vector<int> buffer_g = buffer.g;
+  //std::vector<int> buffer_b = buffer.b;
+
+  std::vector<int> buffer_rbg;
+
+  col = de_nan(col);
+  col = col / float(samplecount);
+  col[0] = sqrt(col[0]);
+  col[1] = sqrt(col[1]);
+  col[2] = sqrt(col[2]);
+  int ir = int(255.99*col[0]);
+  int ig = int(255.99*col[1]);
+  int ib = int(255.99*col[2]);
+
+  int pix_val = ir + ig + ib;
+
+//  buffer_r.push_back(ir);
+//  buffer_g.push_back(ig);
+//  buffer_b.push_back(ib);
+
+  //buffer.r.push_back(ir);
+  //buffer.g.push_back(ig);
+  //buffer.b.push_back(ib);
+  buffer_rbg.push_back(ir);
+  buffer_rbg.push_back(ig);
+  buffer_rbg.push_back(ib);
+  buffer.push_back(buffer_rbg);
+
+  return buffer;
+}
+//template<>
+std::vector<std::vector<int>> passMatrix(std::vector<std::vector<int>> &buffer,
+          int samplecount,
+          vtkm::Float32 &col)
+{
+  //std::vector<int> buffer_r = buffer.r;//[0];
+  //std::vector<int> buffer_g = buffer.g;//[1];
+  //std::vector<int> buffer_b = buffer.b;//[2];
+
+  std::vector<int> buffer_rbg;
+
+  int ir = int(255.99*col);
+  int ig = int(255.99*col);
+  int ib = int(255.99*col);
+  int pix_val  =  ir + ig + ib;
+
+
+//  buffer_r.push_back(ir);
+//  buffer_g.push_back(ig);
+//  buffer_b.push_back(ib);
+
+
+  buffer_rbg.push_back(ir);
+  buffer_rbg.push_back(ig);
+  buffer_rbg.push_back(ib);
+
+  buffer.push_back(buffer_rbg);
+  return buffer;
+
+}
+// first called
+template<typename ArrayType>
+std::vector<std::vector<int>> passMatrix(std::vector<std::vector<int>> buffer,
+          int nx, int ny, int samplecount,
+          ArrayType &cols)
+{
+
+    std::vector<int> clmn_order = {2,1,0};
+    //fs << "P3\n" << nx << " "  << ny << " 255" << std::endl;
+    //for (int i=0; i<cols.GetNumberOfValues(); i++){    //reversed for image orientation
+    for (int i=cols.GetNumberOfValues()-1; i>=0 ; i--){
+      auto col = cols.GetPortalConstControl().Get(i);
+      if (col != col)
+        col = 0.0f;
+      passMatrix(buffer, samplecount, col);
+    }
+
+    return buffer;
+
+}
+
+
+std::vector<std::vector<int>> passMatrix(std::vector<std::vector<int>> buffer,
+          int nx, int ny, int samplecount,
+          vtkm::cont::ArrayHandleCompositeVector<
+                vtkm::cont::ArrayHandle<vtkm::Float32>,
+                vtkm::cont::ArrayHandle<vtkm::Float32>,
+                vtkm::cont::ArrayHandle<vtkm::Float32>> &albedos)
+{
+
+
+    std::vector<int> buffer_rbg;
+    //fs << "P3\n" << nx << " "  << ny << " 255" << std::endl;
+    for (int i=0; i<3; i++){
+      auto alb_r = albedos.GetPortalConstControl().Get(0)[i];//.GetPortalConstControl().Get(i);
+      auto alb_b = albedos.GetPortalConstControl().Get(1)[i];//.GetPortalConstControl().Get(i);
+      auto alb_g = albedos.GetPortalConstControl().Get(2)[i];//.GetPortalConstControl().Get(i);
+      vtkm::Float32 sum_alb = alb_r + alb_b + alb_g;
+      if (sum_alb != sum_alb)
+          sum_alb = 0.0f;
+
+      buffer_rbg.push_back(alb_r);
+      buffer_rbg.push_back(alb_g);
+      buffer_rbg.push_back(alb_b);
+
+    }
+    buffer.push_back(buffer_rbg);
+    return buffer;
+}
+
+// %% save to file func :
+
 template<typename ValueType>
 void save(std::fstream &fs,
           int samplecount,
           ValueType &col);
 
+//decide to do casting transform for 255-rbg no or
+// within pythion
 template<>
 void save(std::fstream &fs,
           int samplecount,
@@ -479,7 +631,7 @@ void save_buffer_diff(std::string fn,
 }
 
 
-void generateHemisphere(int nx, int ny, int samplecount, int depthcount, bool direct)
+void generateHemisphere(int nx, int ny, int samplecount, int depthcount, bool direct, bool save_image)
 {
   vtkm::rendering::CanvasRayTracer canvas(nx,ny);
   vtkm::rendering::Camera cam;
@@ -514,47 +666,140 @@ void generateHemisphere(int nx, int ny, int samplecount, int depthcount, bool di
       cam.SetPosition(pos);
       std::stringstream sstr;
       if (direct){
-        sstr << "direct-" << phi << "-" << theta << ".ppm";
+
+          //
+          // TODO: Once faster, use passMatrix to feed pytorch hemisphere in else statements
+          //
+        sstr << "direct-" << phi << "-" << theta << ".pnm";
         runRay(nx,ny,samplecount, depthcount, canvas, cam);
-        save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
+        if(save_image)
+            save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
 
         sstr.str("");
-        sstr << "depth-" << phi << "-" << theta << ".ppm";
-        save(sstr.str(), nx, ny, samplecount, canvas.GetDepthBuffer());
+        sstr << "depth-" << phi << "-" << theta << ".pnm";
+        if(save_image)
+            save(sstr.str(), nx, ny, samplecount, canvas.GetDepthBuffer());
 
         sstr.str("");
         runNorms(nx,ny,samplecount,depthcount, canvas, cam);
-        sstr << "normals-" << phi << "-" << theta << ".ppm";
-        save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
-        /*
-        sstr.str("");
-        sstr << "pathAlbedo-" << phi << "-" << theta << ".pnm";
-        vtkm::cont::ArrayHandleCompositeVector<
-              vtkm::cont::ArrayHandle<vtkm::Float32>,
-              vtkm::cont::ArrayHandle<vtkm::Float32>,
-              vtkm::cont::ArrayHandle<vtkm::Float32>> albedoBuffer = runPathAlbedo(nx,ny,samplecount, depthcount, canvas, cam);
-        //std::cout << albedoBuffer.GetPortalConstControl().Get(1)  << "buffer " << std::endl;
-        save(sstr.str(), nx, ny, samplecount, albedoBuffer);
-        */
+        sstr << "normals-" << phi << "-" << theta << ".pnm";
+        if(save_image)
+            save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
 
-
-/*
         sstr.str("");
         runAlbedo(nx,ny,samplecount,depthcount, canvas, cam);
-        sstr << "albedo-" << phi << "-" << theta << ".ppm";
-        save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
+        sstr << "albedo-" << phi << "-" << theta << ".pnm";
+        if(save_image)
+            save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
       }
       else{
-        sstr << "output-" << phi << "-" << theta << ".ppm";
+        sstr << "output-" << phi << "-" << theta << ".pnm";
         runPath(nx,ny, samplecount, depthcount, canvas, cam);
       }
-      save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
+      if(save_image)
+        save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
     }
   }
 }
 
+std::array<std::vector<std::vector<int>>,4> renderFromOrientation(int nx, int ny, int samplecount, int depthcount,
+                           float theta, float phi,
+                           bool direct, bool save_image)
+{
+  vtkm::rendering::CanvasRayTracer canvas(nx,ny);
+  vtkm::rendering::Camera cam;
+  cam.SetPosition(vec3(278,278,-800));
+  cam.SetFieldOfView(40.f);
+  cam.SetViewUp(vec3(0,1,0));
+  cam.SetLookAt(vec3(278,278,278));
 
-int trainingTracer(int argc,int nx, int ny,
+  int numPhi = 30;
+  int numTheta = 30; //for 1080 upside down both 50
+
+  float rTheta = (2.0*M_PI)/float(numTheta);
+  float rPhi = (M_PI/2.0)/float(numPhi);
+
+  float r = -1078;
+
+      auto x = r * cos(theta) * sin(phi);
+      auto y = r * sin(theta) * sin(phi);
+      auto z = r * cos(phi);
+      //std::cout << " x " << x << " y " <<y <<" z " << z << std::endl;
+      //std::cout << "PHI " << phi << " THETA " << theta << " R " << r << std::endl;
+      if(x!=x) x=0;
+      if(y!=y) y=0;
+      if(z!=z) z=0;
+      vec3 pos(x+278, y+278, z+278 );
+      cam.SetPosition(pos);
+      std::stringstream sstr;
+      if (direct){
+
+          std::vector<std::vector<int>> direct_buffer(nx, std::vector<int>(ny));
+          std::vector<std::vector<int>> depth_buffer;
+          std::vector<std::vector<int>> normal_buffer;
+          std::vector<std::vector<int>> albedo_buffer;
+
+        sstr << "direct-" << phi << "-" << theta << ".pnm";
+        runRay(nx,ny,samplecount, depthcount, canvas, cam);
+        if(save_image)
+            save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
+        else
+            passMatrix(direct_buffer, nx, ny, samplecount, canvas.GetColorBuffer());
+
+        sstr.str("");
+        sstr << "depth-" << phi << "-" << theta << ".pnm";
+        if(save_image)
+            save(sstr.str(), nx, ny, samplecount, canvas.GetDepthBuffer());
+        else
+            passMatrix(depth_buffer, nx, ny, samplecount, canvas.GetDepthBuffer());
+
+        sstr.str("");
+        runNorms(nx,ny,samplecount,depthcount, canvas, cam);
+        sstr << "normals-" << phi << "-" << theta << ".pnm";
+        if(save_image)
+            save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
+        else
+            passMatrix(normal_buffer, nx, ny, samplecount, canvas.GetColorBuffer());
+
+        sstr.str("");
+        runAlbedo(nx,ny,samplecount,depthcount, canvas, cam);
+        sstr << "albedo-" << phi << "-" << theta << ".pnm";
+        if(save_image)
+            save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
+        else
+            passMatrix(albedo_buffer, nx, ny, samplecount, canvas.GetColorBuffer());
+
+        std::array<std::vector<std::vector<int>>, 4> conditionalImagePack;
+
+        conditionalImagePack[0] = direct_buffer;
+        conditionalImagePack[1] = depth_buffer;
+        conditionalImagePack[2] = normal_buffer;
+        conditionalImagePack[3] = albedo_buffer;
+//        conditionalImagePack.push_back(direct_buffer);
+//        conditionalImagePack.push_back(depth_buffer);
+//        conditionalImagePack.push_back(normal_buffer);
+//        conditionalImagePack.push_back(albedo_buffer);
+
+        return conditionalImagePack;
+      }
+      else{
+        sstr << "output-" << phi << "-" << theta << ".pnm";
+        runPath(nx,ny, samplecount, depthcount, canvas, cam);
+        std::vector<std::vector<int>> pathTracedImage;//(4, std::vector<int>(nx* ny));
+        pathTracedImage = passMatrix(pathTracedImage, nx, ny, samplecount, canvas.GetColorBuffer());
+
+        std::array<std::vector<std::vector<int>>, 4> conditionalImagePack;
+        conditionalImagePack[0] = pathTracedImage;
+        return conditionalImagePack; //error here
+
+      }
+      if(save_image)
+        save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
+
+}
+
+
+std::vector<std::vector<int>> pathTraceImage(int nx, int ny,
                    int samplecount, int depthcount,
                    int hemisphere,  int buffers){//char *argv[]) {
 
@@ -564,10 +809,76 @@ int trainingTracer(int argc,int nx, int ny,
   //const int samplecount = std::get<2>(tup);
   //const int depthcount = std::get<3>(tup);
   bool hemi = hemisphere != 0;//std::get<4>(tup);
+  bool conditionals = buffers != 0;//std::get<5>(tup);
+
+  if (hemi){
+      std::string temp = "under construction";
+      std::vector<std::vector<int>> pathTracedImage;
+      //generateHemisphere(nx,ny, samplecount, depthcount, conditionals, false);
+      return pathTracedImage;
+
+
+  }
+  else
+  {
+    vtkm::rendering::CanvasRayTracer canvas(nx,ny);
+    vtkm::rendering::Camera cam;
+    cam.SetClippingRange(0.001f, 10000.f);
+    cam.SetPosition(vec3(278,278,-800));
+    cam.SetFieldOfView(40.);
+    cam.SetViewUp(vec3(0,1,0));
+    cam.SetLookAt(vec3(278,278,278));
+
+    runPath(nx,ny, samplecount, depthcount, canvas, cam);
+    //std::stringstream sstr;
+    //sstr << "output.pnm";
+    std::vector<std::vector<int>> pathTracedImage;//(4, std::vector<int>(nx* ny));
+    pathTracedImage = passMatrix(pathTracedImage, nx, ny, samplecount, canvas.GetColorBuffer());
+
+    return pathTracedImage;
+  }
+}
+
+
+int saveTracedImage(int nx, int ny,
+                   int samplecount, int depthcount,
+                   int hemisphere,  int buffers){//char *argv[]) {
+
+
+  bool hemi = hemisphere != 0;//std::get<4>(tup);
+  bool conditionals = buffers != 0;//std::get<5>(tup);
+
+  if (hemi)
+    generateHemisphere(nx,ny, samplecount, depthcount, conditionals, true);
+  else
+  {
+    vtkm::rendering::CanvasRayTracer canvas(nx,ny);
+    vtkm::rendering::Camera cam;
+    cam.SetClippingRange(0.001f, 10000.f);
+    cam.SetPosition(vec3(278,278,-800));
+    cam.SetFieldOfView(40.);
+    cam.SetViewUp(vec3(0,1,0));
+    cam.SetLookAt(vec3(278,278,278));
+
+    runPath(nx,ny, samplecount, depthcount, canvas, cam);
+    std::stringstream sstr;
+    sstr << "output.pnm";
+    save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
+
+  }
+
+  return 1;
+}
+
+int saveRenderedBuffers(int nx, int ny,
+                   int samplecount, int depthcount,
+                   int hemisphere,  int buffers){//char *argv[]) {
+
+  bool hemi = hemisphere != 0;//std::get<4>(tup);
   bool direct = buffers != 0;//std::get<5>(tup);
 
   if (hemi)
-    generateHemisphere(nx,ny, samplecount, depthcount, direct);
+    generateHemisphere(nx,ny, samplecount, depthcount, direct, true);
   else
   {
     vtkm::rendering::CanvasRayTracer canvas(nx,ny);
@@ -582,72 +893,126 @@ int trainingTracer(int argc,int nx, int ny,
       std::stringstream sstr;
       sstr << "direct.pnm";
       save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
-      sstr.str("depth.pnm");
+      sstr.str("");
+      sstr << "depth.pnm";
       save(sstr.str(), nx, ny, samplecount, canvas.GetDepthBuffer());
+      sstr.str("");
       runNorms(nx,ny,samplecount,depthcount, canvas, cam);
       sstr << "normals.pnm";
       save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
-    }
-    else{
-      runPath(nx,ny, samplecount, depthcount, canvas, cam);
-      std::stringstream sstr;
-      sstr << "output.pnm";
-      save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
-
+      sstr.str("");
+      runAlbedo(nx,ny,samplecount,depthcount, canvas, cam);//
+      sstr << "albedo.pnm";//
+      save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());//
     }
   }
+  return 1;
 }
+
+struct conditionalImagePack{
+    std::vector<std::vector<int>> direct;
+    std::vector<std::vector<int>> depth;
+    std::vector<std::vector<int>> normal;
+    std::vector<std::vector<int>> albedo;
+};
+
+ std::vector<std::vector<int>> renderBuffers(int nx, int ny,          //std::array<std::vector< std::vector<int> >,4>
+                   int samplecount, int depthcount,
+                   int hemisphere,  int buffers){//char *argv[]) {
+
+
+  bool hemi = hemisphere != 0;//std::get<4>(tup);
+  bool direct = buffers != 0;//std::get<5>(tup);
+
+  if (hemi){
+
+    std::array<std::vector<std::vector<int>> ,4> conditionalImagePack;
+
+    std::vector<std::vector<int>> direct_buffer;
+    std::vector<std::vector<int>> depth_buffer;
+    std::vector<std::vector<int>> normal_buffer;
+    std::vector<std::vector<int>> albedo_buffer;
+
+    generateHemisphere(nx,ny, samplecount, depthcount, direct, false);
+
+    conditionalImagePack[0] = direct_buffer;
+    conditionalImagePack[1] = depth_buffer;
+    conditionalImagePack[2] = normal_buffer;
+    conditionalImagePack[3] = albedo_buffer;
+
+    return direct_buffer;//conditionalImagePack; //{direct_buffer, depth_buffer, normal_buffer, albedo_buffer}; //
+  }
+  else
+  {
+    vtkm::rendering::CanvasRayTracer canvas(nx,ny);
+    vtkm::rendering::Camera cam;
+    cam.SetClippingRange(0.001f, 10000.f);
+    cam.SetPosition(vec3(278,278,-800));
+    cam.SetFieldOfView(40.);
+    cam.SetViewUp(vec3(0,1,0));
+    cam.SetLookAt(vec3(278,278,278));
+    //if (direct){
+
+      std::array<std::vector<std::vector<int>> ,4> conditionalImagePack;
+
+      std::vector<std::vector<int>> direct_buffer;// = reserveImageMatrix(nx, ny);
+
+      runRay(nx,ny,samplecount,depthcount, canvas, cam);
+      //std::stringstream sstr;
+      //sstr << "direct.pnm";
+      passMatrix(direct_buffer, nx, ny, samplecount, canvas.GetColorBuffer());
+      //sstr.str("");
+
+      std::vector<std::vector<int>> depth_buffer;// = reserveImageMatrix(nx, ny);
+
+      //sstr << "depth.pnm";
+      passMatrix(depth_buffer, nx, ny, samplecount, canvas.GetDepthBuffer());
+      //sstr.str("");
+
+      std::vector<std::vector<int>> normal_buffer;// = reserveImageMatrix(nx, ny);
+
+      runNorms(nx,ny,samplecount,depthcount, canvas, cam);
+      //sstr << "normals.pnm";
+      passMatrix(normal_buffer, nx, ny, samplecount, canvas.GetColorBuffer());
+      //sstr.str("");
+
+      std::vector<std::vector<int>> albedo_buffer;// = reserveImageMatrix(nx, ny);
+      runAlbedo(nx,ny,samplecount,depthcount, canvas, cam);
+      //sstr << "albedo.pnm";
+      passMatrix(albedo_buffer, nx, ny, samplecount, canvas.GetColorBuffer());
+
+      conditionalImagePack[0] = direct_buffer;
+      conditionalImagePack[1] = depth_buffer;
+      conditionalImagePack[2] = normal_buffer;
+      conditionalImagePack[3] = albedo_buffer;
+
+      return direct_buffer;//conditionalImagePack;
+  }
+}
+
+//TODO
+//write to adios in C++ and read from python adios
+// fix direct non hemisphere
+// convert buffer to array type applicable to python (getportanlcontrol)
+// save above with adios in c++
 PYBIND11_MODULE(trainingTracer, m){ //called at import, module example, m denotes variable type py::module
-  m.doc() = "pybind11 example plugin";// optional module docstring
-
-  m.def("trainingTracer", &trainingTracer, "A super complex arithmatic");//, py::arg("i"), py::arg("j")); //method generating bianry code exposing add() to python, arg allows keyword arguments for function calls from within python.}
+  m.doc() = "path tracer and buffer rendering implementation in vtk-m";// optional module docstring
+  // return as matrix defs
+  m.def("pathTraceImage", &pathTraceImage, "Render Path Traced Image and return as %%%%% type matrix");
+  m.def("renderBuffers", &renderBuffers, "Render Path Traced Image and return as %%%% type matrix");
+  // store to file defs
+  m.def("saveTracedImage", &saveTracedImage, "Render Path Traced Image and save to file");//, py::arg("i"), py::arg("j")); //method generating bianry code exposing add() to python, arg allows keyword arguments for function calls from within python.}
+  m.def("saveRenderedBuffers", &saveRenderedBuffers, "Render Conditional Image Buffers and save to file");
+  m.def("renderFromOrientation", &renderFromOrientation, "Render Conditional Image Buffers or path traced image from given camera angle perspective");
 }
-
-
-int main(int argc, char *argv[]) {
-
-  const auto tup = parse(argc, argv);
-  const int nx = std::get<0>(tup);
-  const int ny = std::get<1>(tup);
-  const int samplecount = std::get<2>(tup);
-  const int depthcount = std::get<3>(tup);
-  const bool hemi = std::get<4>(tup);
-  const bool direct = std::get<5>(tup);
-
-  if (hemi)
-    generateHemisphere(nx,ny, samplecount, depthcount, direct);
-  else
-  {
-    vtkm::rendering::CanvasRayTracer canvas(nx,ny);
-    vtkm::rendering::Camera cam;
-    cam.SetClippingRange(0.001f, 10000.f);
-    cam.SetPosition(vec3(278,278,-800));
-    cam.SetFieldOfView(40.);
-    cam.SetViewUp(vec3(0,1,0));
-    cam.SetLookAt(vec3(278,278,278));
-    if (direct){
-      runRay(nx,ny,samplecount,depthcount, canvas, cam);
-      std::stringstream sstr;
-      sstr << "direct.pnm";
-      save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
-      sstr.str("depth.pnm");
-      save(sstr.str(), nx, ny, samplecount, canvas.GetDepthBuffer());
-      runNorms(nx,ny,samplecount,depthcount, canvas, cam);
-      sstr << "normals.pnm";
-      save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
-    }
-    else{
-      runPath(nx,ny, samplecount, depthcount, canvas, cam);
-      std::stringstream sstr;
-      sstr << "output.pnm";
-      save(sstr.str(), nx, ny, samplecount, canvas.GetColorBuffer());
-
-    }
-  }
+PYBIND11_MODULE(trainingTracer_cuda, m){ //called at import, module example, m denotes variable type py::module
+  m.doc() = "path tracer and buffer rendering implementation in vtk-m with cuda";// optional module docstring
+  // return as matrix defs
+  m.def("pathTraceImage", &pathTraceImage, "Render Path Traced Image and return as %%%%% type matrix");
+  m.def("renderBuffers", &renderBuffers, "Render Path Traced Image and return as %%%% type matrix");
+  // store to file defs
+  m.def("saveTracedImage", &saveTracedImage, "Render Path Traced Image and save to file");//, py::arg("i"), py::arg("j")); //method generating bianry code exposing add() to python, arg allows keyword arguments for function calls from within python.}
+  m.def("saveRenderedBuffers", &saveRenderedBuffers, "Render Conditional Image Buffers and save to file");
+  m.def("renderFromOrientation", &renderFromOrientation, "Render Conditional Image Buffers or path traced image from given camera angle perspective",
+        "nx"_a, "ny"_a, "samplecount"_a, "depthcount"_a, "theta"_a, "phi"_a,"direct"_a, "save_image"_a);
 }
-
-*/
-int main(int argc, char *argv[]) {
-    return argc;
-}
-
