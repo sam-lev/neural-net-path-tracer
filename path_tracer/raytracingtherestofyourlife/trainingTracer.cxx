@@ -45,11 +45,22 @@
 // to allow python binding
 #include "pybind11/include/pybind11/pybind11.h"
 #include <pybind11/include/pybind11/stl.h> //for conversion to python type
+//#include <pybind11/include/pybind11/stl_bind.h> //for binding stl type as native python
 
 //for groups of vectors to pass to python
 #include <array>
+#include <vector>
 
 namespace py = pybind11;
+
+
+PYBIND11_MAKE_OPAQUE(std::vector<int, std::allocator<int>>) // to prevent copying vectors
+// not sure if needed
+PYBIND11_MAKE_OPAQUE(std::vector<std::vector<int, std::allocator<int>>, std::allocator<std::vector<int, std::allocator<int>>>>) // to prevent copying vectors
+//PYBIND11_MAKE_OPAQUE(std::vector<std::vector<int>>)
+PYBIND11_MAKE_OPAQUE(std::array<std::vector<std::vector<int>>,4>)
+
+
 
 using ArrayType = vtkm::cont::ArrayHandle<vec3>;
 
@@ -341,12 +352,6 @@ vtkm::cont::ArrayHandleCompositeVector<
     return attenuation;
 }
 
-struct rbg{
-    std::vector<int> r;
-    std::vector<int> b;
-    std::vector<int> g;
-    std::vector<int> alpha;
-};
 
 template<typename ValueType>
 void passMatrix(std::vector<std::vector<int>> &buffer,
@@ -391,15 +396,15 @@ std::vector<std::vector<int>> passMatrix(std::vector<std::vector<int>> &buffer,
   int ig = int(255.99*col[1]);
   int ib = int(255.99*col[2]);
 
-  int pix_val = ir + ig + ib;
+  //int pix_val = ir + ig + ib;
 
-//  buffer_r.push_back(ir);
-//  buffer_g.push_back(ig);
-//  buffer_b.push_back(ib);
+  if(ir != ir)
+      ir = 0;
+  if(ib != ib)
+      ib = 0;
+  if(ig != ig)
+      ig = 0;
 
-  //buffer.r.push_back(ir);
-  //buffer.g.push_back(ig);
-  //buffer.b.push_back(ib);
   buffer_rbg.push_back(ir);
   buffer_rbg.push_back(ig);
   buffer_rbg.push_back(ib);
@@ -421,8 +426,14 @@ std::vector<std::vector<int>> passMatrix(std::vector<std::vector<int>> &buffer,
   int ir = int(255.99*col);
   int ig = int(255.99*col);
   int ib = int(255.99*col);
-  int pix_val  =  ir + ig + ib;
+  //int pix_val  =  ir + ig + ib;
 
+  if(ir != ir)
+      ir = 0;
+  if(ib != ib)
+      ib = 0;
+  if(ig != ig)
+      ig = 0;
 
 //  buffer_r.push_back(ir);
 //  buffer_g.push_back(ig);
@@ -477,7 +488,12 @@ std::vector<std::vector<int>> passMatrix(std::vector<std::vector<int>> buffer,
       vtkm::Float32 sum_alb = alb_r + alb_b + alb_g;
       if (sum_alb != sum_alb)
           sum_alb = 0.0f;
-
+      if(alb_r != alb_r)
+          alb_r = 0;
+      if(alb_b != alb_b)
+          alb_b = 0;
+      if(alb_g != alb_g)
+          alb_g = 0;
       buffer_rbg.push_back(alb_r);
       buffer_rbg.push_back(alb_g);
       buffer_rbg.push_back(alb_b);
@@ -909,14 +925,8 @@ int saveRenderedBuffers(int nx, int ny,
   return 1;
 }
 
-struct conditionalImagePack{
-    std::vector<std::vector<int>> direct;
-    std::vector<std::vector<int>> depth;
-    std::vector<std::vector<int>> normal;
-    std::vector<std::vector<int>> albedo;
-};
 
- std::vector<std::vector<int>> renderBuffers(int nx, int ny,          //std::array<std::vector< std::vector<int> >,4>
+std::array<std::vector<std::vector<int>>, 4>  renderBuffers(int nx, int ny,          //std::array<std::vector< std::vector<int> >,4>
                    int samplecount, int depthcount,
                    int hemisphere,  int buffers){//char *argv[]) {
 
@@ -933,6 +943,7 @@ struct conditionalImagePack{
     std::vector<std::vector<int>> normal_buffer;
     std::vector<std::vector<int>> albedo_buffer;
 
+    // need to collect all orientations and feed to python
     generateHemisphere(nx,ny, samplecount, depthcount, direct, false);
 
     conditionalImagePack[0] = direct_buffer;
@@ -940,7 +951,7 @@ struct conditionalImagePack{
     conditionalImagePack[2] = normal_buffer;
     conditionalImagePack[3] = albedo_buffer;
 
-    return direct_buffer;//conditionalImagePack; //{direct_buffer, depth_buffer, normal_buffer, albedo_buffer}; //
+    return conditionalImagePack;
   }
   else
   {
@@ -986,7 +997,7 @@ struct conditionalImagePack{
       conditionalImagePack[2] = normal_buffer;
       conditionalImagePack[3] = albedo_buffer;
 
-      return direct_buffer;//conditionalImagePack;
+      return conditionalImagePack;
   }
 }
 
@@ -995,6 +1006,10 @@ struct conditionalImagePack{
 // fix direct non hemisphere
 // convert buffer to array type applicable to python (getportanlcontrol)
 // save above with adios in c++
+
+
+
+
 PYBIND11_MODULE(trainingTracer, m){ //called at import, module example, m denotes variable type py::module
   m.doc() = "path tracer and buffer rendering implementation in vtk-m";// optional module docstring
   // return as matrix defs
@@ -1004,7 +1019,36 @@ PYBIND11_MODULE(trainingTracer, m){ //called at import, module example, m denote
   m.def("saveTracedImage", &saveTracedImage, "Render Path Traced Image and save to file");//, py::arg("i"), py::arg("j")); //method generating bianry code exposing add() to python, arg allows keyword arguments for function calls from within python.}
   m.def("saveRenderedBuffers", &saveRenderedBuffers, "Render Conditional Image Buffers and save to file");
   m.def("renderFromOrientation", &renderFromOrientation, "Render Conditional Image Buffers or path traced image from given camera angle perspective");
-}
+
+  //to pass in place so nothing stored
+  py::class_<std::vector<int>>(m, "IntVector")
+      .def(py::init<>())
+      .def("clear", &std::vector<int>::clear)
+      .def("pop_back", &std::vector<int>::pop_back)
+      .def("__len__", [](const std::vector<int> &v) {return v.size(); })
+      .def("__iter__", [](std::vector<int> &v) {
+          return py::make_iterator(v.begin(), v.end());
+        }, py::keep_alive<0, 1>());
+
+  //to pass in place so nothing stored
+  py::class_<std::vector<std::vector<int>>>(m, "VecVector")
+      .def(py::init<>())
+      .def("clear", &std::vector<std::vector<int>>::clear)
+      .def("pop_back", &std::vector<std::vector<int>>::pop_back)
+      .def("__len__", [](const std::vector<std::vector<int>> &v) {return v.size(); })
+      .def("__iter__", [](std::vector<std::vector<int>> &v) {
+          return py::make_iterator(v.begin(), v.end());
+        }, py::keep_alive<0, 1>());
+  //to pass in place so nothing stored
+  py::class_<std::array<std::vector<std::vector<int>>,4>>(m, "VecArray")
+      .def(py::init<>())
+      //.def("clear", &std::array<std::vector<std::vector<int>>,4>::clear)
+      //.def("pop_back", &std::array<std::vector<std::vector<int>>,4>::pop_back)
+      .def("__len__", [](const std::array<std::vector<std::vector<int>>,4> &v) {return v.size(); })
+      .def("__iter__", [](std::array<std::vector<std::vector<int>>,4> &v) {
+          return py::make_iterator(v.begin(), v.end());
+        }, py::keep_alive<0, 1>());
+  }
 PYBIND11_MODULE(trainingTracer_cuda, m){ //called at import, module example, m denotes variable type py::module
   m.doc() = "path tracer and buffer rendering implementation in vtk-m with cuda";// optional module docstring
   // return as matrix defs
@@ -1013,6 +1057,35 @@ PYBIND11_MODULE(trainingTracer_cuda, m){ //called at import, module example, m d
   // store to file defs
   m.def("saveTracedImage", &saveTracedImage, "Render Path Traced Image and save to file");//, py::arg("i"), py::arg("j")); //method generating bianry code exposing add() to python, arg allows keyword arguments for function calls from within python.}
   m.def("saveRenderedBuffers", &saveRenderedBuffers, "Render Conditional Image Buffers and save to file");
+  using namespace pybind11::literals; //for argument shorthand
   m.def("renderFromOrientation", &renderFromOrientation, "Render Conditional Image Buffers or path traced image from given camera angle perspective",
         "nx"_a, "ny"_a, "samplecount"_a, "depthcount"_a, "theta"_a, "phi"_a,"direct"_a, "save_image"_a);
+
+  //to pass in place so nothing saved
+  py::class_<std::vector<int>>(m, "IntVector")
+      .def(py::init<>())
+      .def("clear", &std::vector<int>::clear)
+      .def("pop_back", &std::vector<int>::pop_back)
+      .def("__len__", [](const std::vector<int> &v) {return v.size(); })
+      .def("__iter__", [](std::vector<int> &v) {
+          return py::make_iterator(v.begin(), v.end());
+        }, py::keep_alive<0, 1>());
+
+  py::class_<std::vector<std::vector<int>>>(m, "VecVector")
+      .def(py::init<>())
+      .def("clear", &std::vector<std::vector<int>>::clear)
+      .def("pop_back", &std::vector<std::vector<int>>::pop_back)
+      .def("__len__", [](const std::vector<std::vector<int>> &v) {return v.size(); })
+      .def("__iter__", [](std::vector<std::vector<int>> &v) {
+          return py::make_iterator(v.begin(), v.end());
+        }, py::keep_alive<0, 1>());
+
+  py::class_<std::array<std::vector<std::vector<int>>,4>>(m, "VecArray")
+      .def(py::init<>())
+      //.def("clear", &std::array<std::vector<std::vector<int>>,4>::clear)
+      //.def("pop_back", &std::array<std::vector<std::vector<int>>,4>::pop_back)
+      .def("__len__", [](const std::array<std::vector<std::vector<int>>,4> &v) {return v.size(); })
+      .def("__iter__", [](std::array<std::vector<std::vector<int>>,4> &v) {
+          return py::make_iterator(v.begin(), v.end());
+        }, py::keep_alive<0, 1>());
 }
