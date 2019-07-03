@@ -98,11 +98,17 @@ public:
     else
         newpoint[2] = newpoint[2] / newpoint[3];
 
-    vtkm::Float32 depth = newpoint[2];
+    // RINGS FROM CORNERS!
+    vtkm::Float32 depth = newpoint[2];// vtkm::Sqrt(point[0]*point[0] + point[1]*point[1] +point[2]*point[2]);//newpoint[2];
 
-    vtkm::Float32 re_scale = (555.f * vtkm::Abs(555.f - (785.3f*depth +555.f*depth - 785.3f)))/10.f;
-
-    depth = 0.5f*re_scale + .5f;// vtkm::Abs((depth - 0.99999f) / (.9999999f - 0.99999f)); //0.25f * vtkm::Exp(-0.5f * (depth) ) ;// 0.25f * vtkm::Exp((depth) / (800.0f )) + 0.5f;//nonlinearly_scaled_depth(depth);//0.5f * (depth) + 0.5f;
+    //vtkm::Float32 re_scale = vtkm::Sqrt( (1920.011-point[0])*(1920.011-point[0]) + (1360.3-point[1])*(1360.3-point[1])  +((800+555) - point[2])*((800+555) - point[2]));
+    vtkm::Vec<Precision, 3> d = inDepth*dir;
+    vtkm::Float32 re_scale = (555.f * vtkm::Abs(555.f - (961.3f*depth +555.f*depth - 961.3f)))/10.f;//785
+    //re_scale = vtkm::Sqrt(newpoint[0]*newpoint[0] + newpoint[1]*newpoint[1] +newpoint[2]*newpoint[2]); //- vtkm::Sqrt(point[0]*point[0] + point[1]*point[1] +point[2]*point[2]);
+    //re_scale = 555.f * vtkm::Abs(555.f - (785.3*depth +785.3*depth - 785.3))/10.f;
+    //re_scale = re_scale/vtkm::Sqrt(800*800 + 555*555 + 555*555);
+    //re_scale =(newpoint[2])/(800-555);//*((newpoint[2]+800)/(555-800));
+    depth = 0.5*re_scale + .5;// vtkm::Abs((depth - 0.99999f) / (.9999999f - 0.99999f)); //0.25f * vtkm::Exp(-0.5f * (depth) ) ;// 0.25f * vtkm::Exp((depth) / (800.0f )) + 0.5f;//nonlinearly_scaled_depth(depth);//0.5f * (depth) + 0.5f;
 
     //std::cout << depth << std::endl;
 
