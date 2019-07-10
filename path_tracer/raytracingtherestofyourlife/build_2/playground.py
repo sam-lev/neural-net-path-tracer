@@ -92,7 +92,7 @@ class buffer_tests:
             #image.asty
         elif(buffer_type == "depth"): #no sqrt
             image[image < 0 ] = 0
-            image= 555.99999*image
+            image= 1.-555.99999*image
             image = image.astype(np.uint8)
         elif(buffer_type == "albedo"):
             image[image < 0 ] = 0
@@ -131,5 +131,49 @@ class buffer_tests:
 
     
 
-bt1 = buffer_tests()
-bt1.test1()
+#bt1 = buffer_tests()
+#bt1.test1()
+
+class MorseSmaleComplex:
+    def __init__(self, filename, width=256, height=256):
+        import cv2
+        import os
+        self.filename = filename
+        self.width = width
+        self.height = height
+        
+        self.image = cv2.imread(filename,cv2.IMREAD_UNCHANGED)
+        
+        self.raw_image = np.array(self.image).astype("float32")
+        #self.image = image[:,:,::-1]
+        
+        self.fname_raw = filename + "_smoothed.raw"
+        self.raw_image.tofile(self.fname_raw)
+
+        self.msc
+        
+        self.msc = None
+
+    def msc(self, persistence = 9):
+        import subprocess
+        
+        proc = subprocess.Popen(
+            [   "sh",
+                "/home/sam/Documents/PhD/Research/MSCvisus/MSCTest2DViewer/test_2d_viewer",
+                self.fname_raw,
+                str(self.width),
+                str(self.height),
+                "1",
+                "1",
+                str(persistence),
+            ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        )
+        stdout, stderr = proc.communicate()
+        # print(stdout.decode("utf-8"))
+        # print(stderr.decode("utf-8"))
+        msc = MSC()
+        msc.read_from_file(self.fname_raw)
+        return msc
