@@ -45,8 +45,9 @@
 // to allow python binding
 #include "pybind11/include/pybind11/pybind11.h"
 #include <pybind11/include/pybind11/stl.h> //for conversion to python type
-//#include <pybind11/include/pybind11/numpy.h> //in hopes conversion proir bind will speed things up/avoid element by element conversion
-//#include <pybind11/include/pybind11/stl_bind.h> //for binding stl type as native python
+
+// adios for i/o with python
+//#include <adios2.h> 
 
 //for groups of vectors to pass to python
 #include <array>
