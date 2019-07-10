@@ -47,7 +47,7 @@
 #include <pybind11/include/pybind11/stl.h> //for conversion to python type
 
 // adios for i/o with python
-//#include <adios2.h> 
+#include <adios2.h>
 
 //for groups of vectors to pass to python
 #include <array>
@@ -533,6 +533,47 @@ void save_buffer_diff(std::string fn,
 }
 
 
+template<typename ArrayType>
+void saveADIOS(std::string fn,
+               int nx, int ny, int samplecount,
+               ArrayType &cols)
+{
+  adios2::ADIOS adios(adios2::DebugON);
+  adios2::IO bpIO = adios.DeclareIO("BPFile_N2N");
+
+  adios2::Variable<vtkm::Float32> bpOut = bpIO.DefineVariable<vtkm::Float32>(
+        "pnms", {}, {}, {static_cast<std::size_t>(nx*ny)}, adios2::ConstantDims);
+
+  adios2::Engine writer = bpIO.Open(fn, adios2::Mode::Write);
+
+  auto *ptr = cols.GetStorage().GetArray();
+  writer.Put<vtkm::Float32>(bpOut, ptr );
+  writer.Close();
+
+}
+//template<>
+//void saveADIOS(std::fstream &fs,
+//          int samplecount,
+//          vtkm::Float32 &col)
+//{
+//  col = sqrt(col);
+//  int ir = int(255.99*col);
+//  int ig = int(255.99*col);
+//  int ib = int(255.99*col);
+//  fs << ir << " " << ig << " " << ib << std::endl;
+
+//  adios2::ADIOS adios(adios2::DebugON);
+//  adios2::IO bpIO = adios.DeclareIO("BPFile_N2N");
+
+//  adios2::Variable<vtkm::Float32> bpOut = bpIO.DefineVariable<vtkm::Float32>(
+//        "pnms", {}, {}, {static_cast<std::size_t>(nx*ny)}, adios2::ConstantDims);
+
+//  adios2::Engine writer = bpIO.Open(fn, adios2::Mode::Write);
+
+//  auto *ptr = cols.GetStorage().GetArray();
+//  writer.Put<vtkm::Float32>(bpOut, ptr );
+//  writer.Close();
+//}
 void generateHemisphere(int nx, int ny, int samplecount, int depthcount, bool direct, bool save_image)
 {
   vtkm::rendering::CanvasRayTracer canvas(nx,ny);
@@ -612,7 +653,7 @@ std::array<BufferHandle, 4> renderFromOrientation(
 {
       vtkm::rendering::CanvasRayTracer canvas(nx,ny);
       vtkm::rendering::Camera cam;
-      cam.SetClippingRange(0.001f, 10000.f);
+      cam.SetClippingRange(500.f, 2000.f);
       cam.SetPosition(vec3(278,278,-800));
       cam.SetFieldOfView(40.f);
       cam.SetViewUp(vec3(0,1,0));
@@ -668,17 +709,6 @@ std::array<BufferHandle, 4> renderFromOrientation(
       }
 
 
-
-//      if(buffer_type == "depth"){
-//          sstr.str("");
-//          sstr << "depth-" << phi << "-" << theta << ".pnm";
-//          if(save_image){
-//              save(sstr.str(), nx, ny, samplecount, canvas.GetDepthBuffer());
-//          }
-//          else
-//              depth_buffer = canvas.GetDepthBuffer();
-//      }
-
       if(buffer_type == "normal" || buffer_type == "dataPack"){
           sstr.str("");
           runNorms(nx,ny,samplecount,depthcount, canvas, cam);
@@ -718,7 +748,7 @@ DepthBufferType renderDepthBuffer(
 {
       vtkm::rendering::CanvasRayTracer canvas(nx,ny);
       vtkm::rendering::Camera cam;
-      cam.SetClippingRange(0.001f, 10000.f);
+      cam.SetClippingRange(500.f, 2000.f);
       cam.SetPosition(vec3(278,278,-800));
       cam.SetFieldOfView(40.f);
       cam.SetViewUp(vec3(0,1,0));
@@ -839,7 +869,7 @@ ColorBufferType pathTraceImage(int nx, int ny,
   {
     vtkm::rendering::CanvasRayTracer canvas(nx,ny);
     vtkm::rendering::Camera cam;
-    cam.SetClippingRange(0.001f, 10000.f);
+    cam.SetClippingRange(500.0f, 2000.f);
     cam.SetPosition(vec3(278,278,-800));
     cam.SetFieldOfView(40.);
     cam.SetViewUp(vec3(0,1,0));
@@ -870,7 +900,7 @@ int saveTracedImage(int nx, int ny,
   {
     vtkm::rendering::CanvasRayTracer canvas(nx,ny);
     vtkm::rendering::Camera cam;
-    cam.SetClippingRange(0.001f, 10000.f);
+    cam.SetClippingRange(500.0f, 2000.f);
     cam.SetPosition(vec3(278,278,-800));
     cam.SetFieldOfView(40.);
     cam.SetViewUp(vec3(0,1,0));
@@ -899,7 +929,7 @@ int saveRenderedBuffers(int nx, int ny,
   {
     vtkm::rendering::CanvasRayTracer canvas(nx,ny);
     vtkm::rendering::Camera cam;
-    cam.SetClippingRange(0.001f, 10000.f);
+    cam.SetClippingRange(500.0f, 2000.f);
     cam.SetPosition(vec3(278,278,-800));
     cam.SetFieldOfView(40.);
     cam.SetViewUp(vec3(0,1,0));
@@ -957,7 +987,7 @@ std::array<ColorBufferType, 4>  renderBuffers(int nx, int ny,          //std::ar
   {
     vtkm::rendering::CanvasRayTracer canvas(nx,ny);
     vtkm::rendering::Camera cam;
-    cam.SetClippingRange(0.001f, 10000.f);
+    cam.SetClippingRange(500.0f, 2000.f);
     cam.SetPosition(vec3(278,278,-800));
     cam.SetFieldOfView(40.);
     cam.SetViewUp(vec3(0,1,0));

@@ -568,7 +568,7 @@ int trainingTracer(int argc,int nx, int ny,
   {
     vtkm::rendering::CanvasRayTracer canvas(nx,ny);
     vtkm::rendering::Camera cam;
-    cam.SetClippingRange(0.001f, 10000.f);
+    cam.SetClippingRange(500.f, 2000.f);
     cam.SetPosition(vec3(278,278,-800));
     cam.SetFieldOfView(40.);
     cam.SetViewUp(vec3(0,1,0));
@@ -611,7 +611,7 @@ int main(int argc, char *argv[]) {
   {
     vtkm::rendering::CanvasRayTracer canvas(nx,ny);
     vtkm::rendering::Camera cam;
-    cam.SetClippingRange(0.001f, 10000.f);
+    cam.SetClippingRange(500.f, 2000.f);
     cam.SetPosition(vec3(278,278,-800));
     cam.SetFieldOfView(40.);
     cam.SetViewUp(vec3(0,1,0));
@@ -636,4 +636,5 @@ int main(int argc, char *argv[]) {
     }
   }
 }
+
 
