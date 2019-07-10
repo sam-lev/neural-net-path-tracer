@@ -97,6 +97,7 @@ public:
     }
     else
         newpoint[2] = newpoint[2] / newpoint[3];
+    //
 
     // RINGS FROM CORNERS!
     vtkm::Float32 depth = newpoint[2];// vtkm::Sqrt(point[0]*point[0] + point[1]*point[1] +point[2]*point[2]);//newpoint[2];
