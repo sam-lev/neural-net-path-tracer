@@ -1,0 +1,4 @@
+[submodule "PathTracer"]
+	path = PathTracer
+	url = https://github.com/m-kim/raytracingtherestofyourlife.git
+	branch = master

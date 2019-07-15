@@ -389,8 +389,15 @@ std::vector<std::vector<int>> passMatrix(std::vector<std::vector<int>> buffer,
 
 }
 
-
-
+// return the coordinate in the image dimensions indexing
+// given linear values and dimensions of file
+void CoordinateFromLinearIndex(int idx, int dim_x, int dim_y, double& x, double& y, double& z){
+  x =  idx % (dim_x);
+  idx /= (dim_x);
+  y = idx % (dim_y);
+  idx /= (dim_y);
+  z = idx;
+}
 // %% save to file func :
 
 template<typename ValueType>
@@ -533,6 +540,15 @@ void save_buffer_diff(std::string fn,
 }
 
 
+//
+// Adios outfile
+//
+template<typename ValueType>
+void saveADIOS(std::fstream &fs,
+          int samplecount,
+          ValueType &col);
+
+
 template<typename ArrayType>
 void saveADIOS(std::string fn,
                int nx, int ny, int samplecount,
@@ -551,29 +567,135 @@ void saveADIOS(std::string fn,
   writer.Close();
 
 }
-//template<>
-//void saveADIOS(std::fstream &fs,
-//          int samplecount,
-//          vtkm::Float32 &col)
-//{
-//  col = sqrt(col);
-//  int ir = int(255.99*col);
-//  int ig = int(255.99*col);
-//  int ib = int(255.99*col);
-//  fs << ir << " " << ig << " " << ib << std::endl;
+template<>
+void saveADIOS(std::fstream &fs,
+          int samplecount,
+          vtkm::Float32 &col,
+             int nx, int ny,   int linear_coordinate)
+{
+  col = sqrt(col);
+  int ir = int(255.99*col);
+  int ig = int(255.99*col);
+  int ib = int(255.99*col);
 
-//  adios2::ADIOS adios(adios2::DebugON);
-//  adios2::IO bpIO = adios.DeclareIO("BPFile_N2N");
+  adios2::ADIOS adios(adios2::DebugON);
+  adios2::IO bpIO = adios.DeclareIO("BPFile_N2N");
 
-//  adios2::Variable<vtkm::Float32> bpOut = bpIO.DefineVariable<vtkm::Float32>(
-//        "pnms", {}, {}, {static_cast<std::size_t>(nx*ny)}, adios2::ConstantDims);
+  int x;
+  int y;
+  int z;
+  CoordinateFromLinearIndex(linear_coordinate, nx, ny, &x, &y, &z);
+  adios2::Variable<int> bpOut = bpIO.DefineVariable<int>(
+        "pnms", {1,1}, {x,y}, {nx,ny}, adios2::ConstantDims);
+   //type -> //shape //start //count //dim
+  //note: count specifies amount to write in total dim
+  adios2::Engine writer = bpIO.Open(fn, adios2::Mode::Write);
+  writer.Put<vtkm::Float32>(bpOut, ir );
+  writer.Close();
 
-//  adios2::Engine writer = bpIO.Open(fn, adios2::Mode::Write);
+  CoordinateFromLinearIndex(linear_coordinate, nx, ny, &x, &y, &z);
+  adios2::Variable<int> bpOut = bpIO.DefineVariable<int>(
+        "pnms", {1,1}, {x,y}, {nx,ny}, adios2::ConstantDims);
+   //type -> //shape //start //count //dim
+  //note: count specifies amount to write in total dim
+  adios2::Engine writer = bpIO.Open(fn, adios2::Mode::Write);
+  writer.Put<vtkm::Float32>(bpOut, ig );
+  writer.close();
 
-//  auto *ptr = cols.GetStorage().GetArray();
-//  writer.Put<vtkm::Float32>(bpOut, ptr );
-//  writer.Close();
-//}
+  CoordinateFromLinearIndex(linear_coordinate, nx, ny, &x, &y, &z);
+  adios2::Variable<int> bpOut = bpIO.DefineVariable<int>(
+        "pnms", {1,1}, {x,y}, {nx,ny}, adios2::ConstantDims);
+   //type -> //shape //start //count //dim
+  //note: count specifies amount to write in total dim
+  adios2::Engine writer = bpIO.Open(fn, adios2::Mode::Write);
+  writer.Put<vtkm::Float32>(bpOut, ib );
+  write.close();
+
+}
+template<>
+void saveADIOS(std::fstream &fs,
+          int samplecount,
+          vtkm::Vec<vtkm::Float32,4> &col,
+               int nx, int ny, int linear_coordinate)
+{
+  col = de_nan(col);
+  col = col / float(samplecount);
+  col[0] = sqrt(col[0]);
+  col[1] = sqrt(col[1]);
+  col[2] = sqrt(col[2]);
+  int ir = int(255.99*col[0]);
+  int ig = int(255.99*col[1]);
+  int ib = int(255.99*col[2]);
+  fs << ir << " " << ig << " " << ib << std::endl;
+
+  adios2::ADIOS adios(adios2::DebugON);
+  adios2::IO bpIO = adios.DeclareIO("BPFile_N2N");
+
+  adios2::Variable<int> bpOut = bpIO.DefineVariable<int>(
+        "pnms", {nx,ny}, {0,0}, {nx,ny}, adios2::ConstantDims);
+   //type -> //shape(global) //start(current offset) //count(current dim) //dim
+  //note: count specifies amount to write in total dim
+  adios2::Engine writer = bpIO.Open(fn, adios2::Mode::Write);
+
+  writer.Put<vtkm::Float32>(bpOut, ir );
+  writer.Put<vtkm::Float32>(bpOut, ig );
+  writer.Put<vtkm::Float32>(bpOut, ib );
+  writer.Close();
+
+}
+
+template<typename vtkNestVec>
+void saveADIOS(std::string fn,
+          int samplecount,
+          vtkm::cont::ArrayHandleCompositeVector<
+                vtkm::cont::ArrayHandle<vtkm::Float32>,
+                vtkm::cont::ArrayHandle<vtkm::Float32>,
+                vtkm::cont::ArrayHandle<vtkm::Float32>> &albedos,
+               int nx, int ny, int linear_coordinate)
+{
+  std::fstream fs;
+  fs.open(fn.c_str(), std::fstream::out);
+  if (fs.is_open()){
+    fs << "P3\n" << nx << " "  << ny << " 255" << std::endl;
+    for (int i=0; i<3; i++){
+      auto alb_r = albedos.GetPortalConstControl().Get(i)[0];//.GetPortalConstControl().Get(i);
+      auto alb_b = albedos.GetPortalConstControl().Get(i)[1];//.GetPortalConstControl().Get(i);
+      auto alb_g = albedos.GetPortalConstControl().Get(i)[2];//.GetPortalConstControl().Get(i);
+      vtkm::Float32 sum_alb = alb_r + alb_b + alb_g;
+      if (sum_alb != sum_alb)
+          sum_alb = 0.0f;
+      saveADIOS(fs, samplecount, sum_alb, nx, ny, linear_coordinate + i);
+    }
+    fs.close();
+  }
+  else
+    std::cout << "Couldn't save pnm." << std::endl;
+//  std::vector<std::uint8_t> PngBuffer;
+}
+template<typename ArrayType>
+void saveADIOS(std::string fn,
+          int samplecount,
+          ArrayType &cols,
+               int nx, int ny)
+{
+  std::fstream fs;
+  fs.open(fn.c_str(), std::fstream::out);
+  if (fs.is_open()){
+    std::vector<int> clmn_order = {2,1,0};
+    fs << "P3\n" << nx << " "  << ny << " 255" << std::endl;
+    //for (int i=0; i<cols.GetNumberOfValues(); i++){    //reversed for image orientation
+    for (int i=cols.GetNumberOfValues()-1; i>=0 ; i--){
+      auto col = cols.GetPortalConstControl().Get(i);
+      if (col != col)
+        col = 0.0f;
+      saveADIOS(fs, samplecount, col, nx, ny, i);
+    }
+    fs.close();
+  }
+  else
+    std::cout << "Couldn't save pnm." << std::endl;
+//  std::vector<std::uint8_t> PngBuffer;
+}
 void generateHemisphere(int nx, int ny, int samplecount, int depthcount, bool direct, bool save_image)
 {
   vtkm::rendering::CanvasRayTracer canvas(nx,ny);
