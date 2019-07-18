@@ -8,17 +8,18 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
 
-from data import DataLoaderHelper
+from data import DataLoaderHelper, AdiosDataLoader
 
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 from model import G, D, weights_init, dynamic_weights_init
-from util import load_image, save_image
+from util import load_image, save_image, read_adios_bp
 from skimage.measure import compare_ssim as ssim
 from scipy.misc import imsave
 
 import numpy
 
+#### EXAMPLE RUN:  python3 train.py --dataset /path/to/folder_with_bp_files
 
 parser = argparse.ArgumentParser(description='DeepRendering-implemention')
 parser.add_argument('--dataset', required=True, help='output from unity')
@@ -45,21 +46,31 @@ torch.cuda.manual_seed(opt.seed)
 
 print('=> Loading datasets')
 
-root_dir = "../path_tracer/raytracingtherestofyourlife/dataset/"
-print(os.path.join(root_dir ,opt.dataset))
-print(os.getcwd())
+root_dir = opt.dataset#"../PathTracer/build"
+conditional_names = ["outputs", "direct", "depth", "normals", "albedo"]
+conditionals=[]
+#for c in conditional_names:
+#    conditional_image_group = read_adios_bp(filename = os.path.join(root_dir, c+".bp"), conditional=c)
+#    conditionals.append(conditional_image_group)
+
+#datapack = format_dataLoader(conditionals[0], conditionals[1], conditionals[2], conditionals[3], conditionals[4])
+
+# some higher resolution images
+#root_dir = "../path_tracer/raytracingtherestofyourlife/dataset/"
 train_dir = join(os.path.join(root_dir ,opt.dataset), "train")
-print(train_dir, "--train directory--")
 test_dir = join(os.path.join(root_dir , opt.dataset), "val")
 
-train_set = DataLoaderHelper(train_dir)
-val_set = DataLoaderHelper(test_dir)
+train_set = AdiosDataLoader(opt.dataset,split="train") #DataLoaderHelper(train_dir)
+val_set = AdiosDataLoader(opt.dataset, split="val") #DataLoaderHelper(test_dir)
+test_set = AdiosDataLoader(opt.dataset, split="test")
 
 batch_size = opt.train_batch_size
 n_epoch = opt.n_epoch
 
 train_data = DataLoader(dataset=train_set, num_workers=opt.workers, batch_size=opt.train_batch_size, shuffle=True)
 val_data = DataLoader(dataset=val_set, num_workers=opt.workers, batch_size=opt.test_batch_size, shuffle=False)
+test_data = DataLoader(dataset=test_set, num_workers=opt.workers, batch_size=opt.test_batch_size, shuffle=False)
+
 
 print('=> Building model')
 
@@ -205,18 +216,18 @@ def train(epoch):
 def save_checkpoint(epoch):
     if not os.path.exists("checkpoint"):
         os.mkdir("checkpoint")
-    if not os.path.exists(os.path.join("checkpoint", opt.dataset)):
-        os.mkdir(os.path.join("checkpoint", opt.dataset))
-    net_g_model_out_path = "checkpoint/{}/netG_model_epoch_{}.pth".format(opt.dataset, epoch)
-    net_d_model_out_path = "checkpoint/{}/netD_model_epoch_{}.pth".format(opt.dataset, epoch)
+    if not os.path.exists(os.path.join("checkpoint", opt.dataset.split('/')[-1])):
+        os.mkdir(os.path.join("checkpoint", opt.dataset.split('/')[-1]))
+    net_g_model_out_path = "checkpoint/{}/netG_model_epoch_{}.pth".format(opt.dataset.split('/')[-1], epoch)
+    net_d_model_out_path = "checkpoint/{}/netD_model_epoch_{}.pth".format(opt.dataset.split('/')[-1], epoch)
     torch.save({'epoch':epoch+1, 'state_dict_G': netG.state_dict(), 'optimizer_G':optimizerG.state_dict()}, net_g_model_out_path)
     torch.save({'state_dict_D': netD.state_dict(), 'optimizer_D':optimizerD.state_dict()}, net_d_model_out_path)
-    print("Checkpoint saved to {}".format("checkpoint" + opt.dataset))
+    print("Checkpoint saved to {}".format("checkpoint" + opt.dataset.split('/')[-1]))
 
     if not os.path.exists("validation"):
         os.mkdir("validation")
-    if not os.path.exists(os.path.join("validation", opt.dataset)):
-        os.mkdir(os.path.join("validation", opt.dataset))
+    if not os.path.exists(os.path.join("validation", opt.dataset.split('/')[-1])):
+        os.mkdir(os.path.join("validation", opt.dataset.split('/')[-1]))
 
     for index, images in enumerate(val_data):
         (albedo_cpu, direct_cpu, normal_cpu, depth_cpu, gt_cpu) = (images[0], images[1], images[2], images[3], images[4])
@@ -228,9 +239,9 @@ def save_checkpoint(epoch):
         out = netG(torch.cat((albedo, direct, normal, depth), 1))
         out = out.cpu()
         out_img = out.data[0]
-        save_image(out_img,"validation/{}/{}_Fake.ppm".format(opt.dataset, index))
-        save_image(gt_cpu[0], "validation/{}/{}_Real.ppm".format(opt.dataset, index))
-        save_image(direct_cpu[0],"validation/{}/{}_Direct.ppm".format(opt.dataset, index))
+        save_image(out_img,"validation/{}/{}_Fake.ppm".format(opt.dataset.split('/')[-1], index))
+        save_image(gt_cpu[0], "validation/{}/{}_Real.ppm".format(opt.dataset.split('/')[-1], index))
+        save_image(direct_cpu[0],"validation/{}/{}_Direct.ppm".format(opt.dataset.split('/')[-1], index))
 
 
 
@@ -240,3 +251,4 @@ for epoch in range(n_epoch):
     train(epoch+lastEpoch)
     if epoch % 5 == 0:
         save_checkpoint(epoch+lastEpoch)
+
