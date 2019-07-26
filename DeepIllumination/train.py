@@ -31,13 +31,15 @@ parser.add_argument('--n_channel_output', type=int, default=3, help='number of o
 parser.add_argument('--n_generator_filters', type=int, default=64, help='number of initial generator filters')
 parser.add_argument('--n_discriminator_filters', type=int, default=64, help='number of initial discriminator filters')
 parser.add_argument('--lr', type=float, default=0.0002, help='learning rate')
-parser.add_argument('--beta1', type=float, default=0.5, help='beta1')
+# beta1 changed from 0.5 (low) for adam optimization update rate
+parser.add_argument('--beta1', type=float, default=0.8, help='beta1')
 parser.add_argument('--cuda', action='store_true', help='cuda')
 parser.add_argument('--resume_G', help='resume G')
 parser.add_argument('--resume_D', help='resume D')
 parser.add_argument('--workers', type=int, default=4, help='number of threads for data loader')
 parser.add_argument('--seed', type=int, default=123, help='random seed')
-parser.add_argument('--lamda', type=int, default=170, help='L1 regularization factor')
+#increased from 170 to penalize generator for not being nearer
+parser.add_argument('--lamda', type=int, default=190, help='L1 regularization factor')
 opt = parser.parse_args()
 
 cudnn.benchmark = True
