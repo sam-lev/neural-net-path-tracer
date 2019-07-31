@@ -23,23 +23,27 @@ import numpy
 
 parser = argparse.ArgumentParser(description='DeepRendering-implemention')
 parser.add_argument('--dataset', required=True, help='output from unity')
+# the cGAN is sensitive to images of different sizes due to the
+# con/deconvolution operations. the current network is designed for 256x256
+parser.add_argument('--image_width', type=int, default=256, help='width images in dataset')
+parser.add_argument('--image_height', type=int, default=256, help='height images in dataset')
 parser.add_argument('--train_batch_size', type=int, default=4, help='batch size for training')
 parser.add_argument('--test_batch_size', type=int, default=1, help='batch size for testing')
-parser.add_argument('--n_epoch', type=int, default=200, help='number of iterations')
+parser.add_argument('--n_epoch', type=int, default=400, help='number of iterations')
 parser.add_argument('--n_channel_input', type=int, default=3, help='number of input channels')
 parser.add_argument('--n_channel_output', type=int, default=3, help='number of output channels')
 parser.add_argument('--n_generator_filters', type=int, default=64, help='number of initial generator filters')
 parser.add_argument('--n_discriminator_filters', type=int, default=64, help='number of initial discriminator filters')
-parser.add_argument('--lr', type=float, default=0.0002, help='learning rate')
+parser.add_argument('--lr', type=float, default=0.00002, help='learning rate')
 # beta1 changed from 0.5 (low) for adam optimization update rate
-parser.add_argument('--beta1', type=float, default=0.8, help='beta1')
+parser.add_argument('--beta1', type=float, default=0.4, help='beta1')
 parser.add_argument('--cuda', action='store_true', help='cuda')
 parser.add_argument('--resume_G', help='resume G')
 parser.add_argument('--resume_D', help='resume D')
 parser.add_argument('--workers', type=int, default=4, help='number of threads for data loader')
 parser.add_argument('--seed', type=int, default=123, help='random seed')
 #increased from 170 to penalize generator for not being nearer
-parser.add_argument('--lamda', type=int, default=190, help='L1 regularization factor')
+parser.add_argument('--lamda', type=int, default=260, help='L1 regularization factor')
 opt = parser.parse_args()
 
 cudnn.benchmark = True
@@ -50,12 +54,6 @@ print('=> Loading datasets')
 
 root_dir = opt.dataset#"../PathTracer/build"
 conditional_names = ["outputs", "direct", "depth", "normals", "albedo"]
-conditionals=[]
-#for c in conditional_names:
-#    conditional_image_group = read_adios_bp(filename = os.path.join(root_dir, c+".bp"), conditional=c)
-#    conditionals.append(conditional_image_group)
-
-#datapack = format_dataLoader(conditionals[0], conditionals[1], conditionals[2], conditionals[3], conditionals[4])
 
 # some higher resolution images
 #root_dir = "../path_tracer/raytracingtherestofyourlife/dataset/"

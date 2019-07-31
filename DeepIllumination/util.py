@@ -101,13 +101,13 @@ def translate(image,  samplecount=100, buffer_type = 0, shape = (256,256,3), mod
         img.show()
     return image
 
-def read_adios_bp(filename=None, conditional = "direct", width=128, height=128, sample_count = 300):
+def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, sample_count = 300):
     if not filename:
         print("No File Provided")
     if conditional not in ["direct", "depth", "normals", "albedo", "trace","outputs"]:
         print("Sample must be one of ",["direct", "depth", "normal", "albedo", "trace"], " but was given ", conditional)
-    if filename == "trace":
-        filename="outputs"
+    #if filename == "trace":
+    #    filename="outputs"
     if conditional =="depth":   
         shape = [width, height]
         start = [0]
@@ -130,7 +130,7 @@ def read_adios_bp(filename=None, conditional = "direct", width=128, height=128, 
         for imgs in bundle:
             im = imgs.available_variables()
             for name, attributes in im.items():
-                print("name: ", name)
+                #print("name: ", name)
                 image_names.append(name)
 
                 """ For Testing: """
@@ -159,8 +159,8 @@ def load_adios_image(image_name, conditional, filename=None, width=256, height=2
         print("No File Provided")
     if conditional not in ["direct", "depth", "normals", "albedo", "trace", "outputs"]:
         print("Sample must be one of ",["direct", "depth", "normals", "albedo", "trace"], " but was given ", conditional)
-    if filename == "trace":
-        filename="outputs"
+    #if filename == "trace":
+    #    filename="outputs"
     if conditional =="depth":   
         shape = [width, height]
         start = [0]
@@ -181,8 +181,8 @@ def load_adios_image(image_name, conditional, filename=None, width=256, height=2
         for imgs in bundle:
             im = imgs.available_variables()
             for name, attributes in im.items():
-                #if conditional == "trace":
-                #print("name: ", name, "conditional: ", conditional)
+                if conditional == "albedo":
+                    print("name: ", name, "conditional: ", conditional)
                 image_names.append(name)
                 #for key, value in attributes.items():
                 #    print("\t" + key + ": " + value)

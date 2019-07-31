@@ -18,12 +18,9 @@ class DataLoaderHelper(data.Dataset):
             base = im_name.split('-')
             im_name = base[1]+'-'+base[2]
             self.image_filenames[i] = im_name
-        self.im_show_debug = 0
-        self.im_show_debug += 1
 
 
     def __getitem__(self, index):
-        self.im_show_debug += 1
         albedo = load_image(join(self.albedo_path,'albedo-'+ self.image_filenames[index]))
         depth = load_image(join(self.depth_path, 'depth-'+self.image_filenames[index]))
         direct = load_image(join(self.direct_path,'direct-'+ self.image_filenames[index]))
@@ -37,8 +34,16 @@ class DataLoaderHelper(data.Dataset):
 #### added split for training, validation and test set
 #### using loaded Adios bp files. Each conditional training
 #### set is assumed to have independent bp file
-#creating a pytorch dataset class
-# it contains the data reading, indexing and preprocessing for the chestxray14 dataset
+#### creating a pytorch dataset class
+####
+#### image filenames based on ground truth images available
+#### read_adios_bp(.) takes buffer or ground truth image path
+####                  to bp and returns tuple (image names, dict(name->image))
+####                  conditional param: "direct", "depth", "normals"
+####                                     "albedo", "trace" (or "output").
+#### get_split(.) splits read adios image data into validation set (20%),
+####             training set (60%), and test set (20%).
+####
 class AdiosDataLoader(data.Dataset):
     #split can be 'train', 'val', and 'test'
     def __init__(self, image_dir, split = 'train'):
@@ -79,7 +84,7 @@ class AdiosDataLoader(data.Dataset):
                                         ,sample_count=self.samplecount )[1]
         # path traced image image name to image dict
         self.name_to_image_trace = read_adios_bp(self.gt_path
-                                        ,conditional="trace"
+                                        ,conditional="outputs"
                                         ,width=self.width
                                         ,height=self.height
                                         ,sample_count=self.samplecount )[1]
@@ -95,10 +100,8 @@ class AdiosDataLoader(data.Dataset):
         #    self.image_filenames[i] = im_name
         self.im_show_debug = 0
         self.im_show_debug += 1
-        
-        
+
     def __getitem__(self, index):
-        self.im_show_debug += 1
         name = self.partitioned_image_filenames[index]
         width = 128
         height = 128
