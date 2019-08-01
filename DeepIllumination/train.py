@@ -239,9 +239,9 @@ def save_checkpoint(epoch):
         out = netG(torch.cat((albedo, direct, normal, depth), 1))
         out = out.cpu()
         out_img = out.data[0]
-        save_image(out_img,"validation/{}/{}_Fake.ppm".format(opt.dataset.split('/')[-1], index))
-        save_image(gt_cpu[0], "validation/{}/{}_Real.ppm".format(opt.dataset.split('/')[-1], index))
-        save_image(direct_cpu[0],"validation/{}/{}_Direct.ppm".format(opt.dataset.split('/')[-1], index))
+        save_image_adios(out_img,"validation/{}/{}_Fake.ppm".format(opt.dataset.split('/')[-1], index),opt.image_width, opt.image_height, 4)
+        save_image_adios(gt_cpu[0], "validation/{}/{}_Real.ppm".format(opt.dataset.split('/')[-1], index),opt.image_width, opt.image_height, 4)
+        save_image(direct_cpu[0],"validation/{}/{}_Direct.ppm".format(opt.dataset.split('/')[-1], index),opt.image_width, opt.image_height, 4)
 
 
 
