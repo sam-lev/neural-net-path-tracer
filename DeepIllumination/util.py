@@ -1,13 +1,15 @@
+#!/usr/bin/python3
+
 import numpy as np
-from scipy.misc import imread, imresize, imsave
+#from scipy.misc import imread, imresize, imsave
 import torch
-import cv2
+#import cv2
 import adios2 as a2
 # for debugging
 from PIL import Image
 
 def load_image(filepath):
-    image = cv2.imread(filepath,cv2.IMREAD_UNCHANGED)
+    image = None#cv2.imread(filepath,cv2.IMREAD_UNCHANGED)
     print(image.shape)
     if image is None:
         print(filepath)
