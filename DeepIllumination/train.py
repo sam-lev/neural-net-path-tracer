@@ -13,9 +13,9 @@ from data import DataLoaderHelper, AdiosDataLoader
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 from model import G, D, weights_init, dynamic_weights_init
-from util import load_image, save_image, read_adios_bp
+from util import load_image, save_image, read_adios_bp, save_image_adios
 from skimage.measure import compare_ssim as ssim
-from scipy.misc import imsave
+#from scipy.misc import imsave
 
 import numpy
 
