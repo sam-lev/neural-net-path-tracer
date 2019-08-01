@@ -66,15 +66,15 @@ def save_image(image, filename):
 
 def save_image_adios(image, filename, nx, ny, depth):
     if depth == 1:
-        shape = [width, height]
-        start = [0]
-        count = [width*height]
+        shape = [nx,ny]
+        start = [0,0]
+        count = [nx,ny]
     else:
-        shape = [width, height,4]
-        start = [0]
-        count = [width*height*4]
+        shape = [nx,ny,depth]
+        start = [0,0,0]
+        count = [nx,ny,depth]
         save_mode = "RGB"
-
+    
     image = image.numpy()
     image = image.clip(0, 255)
     image = np.transpose(image, (1, 2, 0))
