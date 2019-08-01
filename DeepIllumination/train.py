@@ -241,7 +241,7 @@ def save_checkpoint(epoch):
         out_img = out.data[0]
         save_image_adios(out_img,"validation/{}/{}_Fake.ppm".format(opt.dataset.split('/')[-1], index),opt.image_width, opt.image_height, 4)
         save_image_adios(gt_cpu[0], "validation/{}/{}_Real.ppm".format(opt.dataset.split('/')[-1], index),opt.image_width, opt.image_height, 4)
-        save_image(direct_cpu[0],"validation/{}/{}_Direct.ppm".format(opt.dataset.split('/')[-1], index),opt.image_width, opt.image_height, 4)
+        save_image_adios(direct_cpu[0],"validation/{}/{}_Direct.ppm".format(opt.dataset.split('/')[-1], index),opt.image_width, opt.image_height, 4)
 
 
 
