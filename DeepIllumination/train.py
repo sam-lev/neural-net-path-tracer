@@ -74,13 +74,28 @@ test_data = DataLoader(dataset=test_set, num_workers=opt.workers, batch_size=opt
 
 print('=> Building model')
 
+# specify gpus to use for data parallelism
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 netG = G(opt.n_channel_input*4, opt.n_channel_output, opt.n_generator_filters)
 netG.apply(dynamic_weights_init)
 netD = D(opt.n_channel_input*4, opt.n_channel_output, opt.n_discriminator_filters)
 netD.apply(weights_init)
 
-criterion = nn.BCELoss()
-criterion_l1 = nn.L1Loss()
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#model = Model(input_size, output_size)
+if torch.cuda.device_count() > 1:
+  print("Let's use", torch.cuda.device_count(), "GPUs!")
+  ### dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+  netG = nn.DataParallel(netG)
+  netD = nn.DataParallel(netD)
+
+#assign neural networks to parralelised GPUS
+#netG.to(device)
+#netD.to(device)
+
+#criterion = nn.BCELoss().to(device)
+#criterion_l1 = nn.L1Loss().to(device)
 
 
 albedo = torch.FloatTensor(opt.train_batch_size, opt.n_channel_input, 256, 256)
@@ -94,18 +109,18 @@ label = torch.FloatTensor(opt.train_batch_size)
 fake_label = 0.1#numpy.random.uniform(0. , 0.1)
 real_label = 0.9# numpy.random.uniform(0.9, 1.0)
 
-netD = netD.cuda()
-netG = netG.cuda()
-criterion = criterion.cuda()
-criterion_l1 = criterion_l1.cuda()
+netD = netD.to(device)#.cuda()
+netG = netG.to(device)#.cuda()
+criterion = criterion.to(device)#.cuda()
+criterion_l1 = criterion_l1.to(device)#.cuda()
 
 
-albedo = albedo.cuda()
-direct = direct.cuda()
-normal = normal.cuda()
-depth = depth.cuda()
-gt = gt.cuda()
-label = label.cuda()
+albedo = albedo.to(device)#.cuda()
+direct = direct.to(device)#.cuda()
+normal = normal.to(device)#.cuda()
+depth = depth.to(device)#.cuda()
+gt = gt.to(device)#.cuda()
+label = label.to(device)#.cuda()
 
 albedo = Variable(albedo)
 direct = Variable(direct)
