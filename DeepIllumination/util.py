@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-
+from mpi4py import MPI
 import numpy as np
 #from scipy.misc import imread, imresize, imsave
 import torch
@@ -78,10 +78,10 @@ def save_image_adios(image, filename, nx, ny, depth):
     image = image.numpy()
     image = image.clip(0, 255)
     image = np.transpose(image, (1, 2, 0))
-    #comm = MPI.COMM_WORLD
+    comm = MPI.COMM_WORLD
     
     # with-as will call adios2.close on fh at the end
-    with a2.open(filename, "w") as fw: #, comm)
+    with a2.open(filename, "w",comm) as fw: #, comm)
         
         fw.write(filename, image, shape, start, count)#, end_step=True)
       
@@ -132,6 +132,8 @@ def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, 
         print("Sample must be one of ",["direct", "depth", "normal", "albedo", "trace"], " but was given ", conditional)
     #if filename == "trace":
     #    filename="outputs"
+    comm = MPI.COMM_WORLD
+    
     if conditional =="depth":   
         shape = [width, height]
         start = [0]
@@ -150,7 +152,7 @@ def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, 
     name_image = {}
     im_count = 0
     view = False
-    with a2.open(filename, "r") as bundle: #mpi here when included
+    with a2.open(filename, "r",  MPI.COMM_SELF) as bundle: #mpi here when included
         for imgs in bundle:
             im = imgs.available_variables()
             for name, attributes in im.items():
