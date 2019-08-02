@@ -16,6 +16,6 @@ build adios2 yourself
  
  module switch to python3
  
-export LD_LIBRARY_PATH=/ccs/home/samlev/bin/adios2/lib64:$LD_LIBRARY_PATH
-export PYTHONPATH=/ccs/home/samlev/bin/adios2/lib64/python3.6/site-packages:$PYTHONPATH
-export PATH=/ccs/home/samlev/bin/adios2/bin:$PATH
+export LD_LIBRARY_PATH=/path/to/personal/build/of/adios2/lib64:$LD_LIBRARY_PATH
+export PYTHONPATH=/path/to/personal/build/of/adios2/lib64/python3.6/site-packages:$PYTHONPATH
+export PATH=/path/to/personal/build/of/adios2/bin:$PATH
