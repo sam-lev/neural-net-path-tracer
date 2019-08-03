@@ -39,7 +39,10 @@ cmake -DADIOS2_USE_Fortran=ON -DCMAKE_INSTALL_PREFIX=$HOME/bin/adios2 -DADIOS2_U
 make -j16
 make install
 
- 
+# change paths to include adios2 build 
 export LD_LIBRARY_PATH=/path/to/personal/build/of/adios2/lib64:$LD_LIBRARY_PATH
 export PYTHONPATH=/path/to/personal/build/of/adios2/lib64/python3.6/site-packages:$PYTHONPATH
 export PATH=/path/to/personal/build/of/adios2/bin:$PATH
+
+# install mpi4py for architecture
+pip install -v --no-binary mpi4py mp
