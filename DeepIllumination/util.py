@@ -133,6 +133,7 @@ def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, 
     #if filename == "trace":
     #    filename="outputs"
     comm = MPI.COMM_WORLD
+    rnk = comm.Get_rank()
     
     if conditional =="depth":   
         shape = [width, height]
@@ -152,6 +153,7 @@ def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, 
     name_image = {}
     im_count = 0
     view = False
+    #if rnk == 0:
     with a2.open(filename, "r",  MPI.COMM_SELF) as bundle: #mpi here when included
         for imgs in bundle:
             im = imgs.available_variables()
@@ -177,7 +179,7 @@ def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, 
                                    ,show = view)
                 image_samples.append(sample)
                 name_image[name] = sample
-                
+    bundle.close()
     return (image_names, name_image)#image_samples)
 
 def load_adios_image(image_name, conditional, filename=None, width=256, height=256, sample_count = 300):
@@ -197,13 +199,19 @@ def load_adios_image(image_name, conditional, filename=None, width=256, height=2
         start = [0]
         count = [width*height*4]
         save_mode = "RGB"
-
+    
+    #MPI
+    comm = MPI.COMM_WORLD
+    rnk = comm.Get_rank()
+    sz = comm.Get_size()
+    
     #print("#########################  ", conditional, " ######")
     IMAGE =  None#np.zeros(count, dtype=np.float32)
     test_view = ""
     image_samples = []
     image_names = []
-    with a2.open(filename, "r") as bundle: #mpi here when included
+    
+    with a2.open(filename, "r", MPI.COMM_SELF) as bundle: #mpi here when included
         for imgs in bundle:
             im = imgs.available_variables()
             for name, attributes in im.items():

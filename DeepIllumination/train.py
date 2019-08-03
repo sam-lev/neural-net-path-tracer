@@ -19,6 +19,8 @@ from skimage.measure import compare_ssim as ssim
 
 import numpy
 
+import time
+
 #### EXAMPLE RUN:  python3 train.py --dataset /path/to/folder_with_bp_files
 
 parser = argparse.ArgumentParser(description='DeepRendering-implemention')
@@ -48,12 +50,13 @@ opt = parser.parse_args()
 
 # profiling and logging
 filename = 'run_log.txt'
+proj_write_dir =  os.path.join(os.environ["PROJWORK"],"csc143","samlev")
 if os.path.exists(filename):
     append_write = 'a' # append if already exists
 else:
     append_write = 'w' # make a new file if not
 
-log = open(filename,append_write)
+log = open(os.path.join(proj_write_dir,filename),append_write)
 log.write(" Beginning Training..............")
 log.close()
 
@@ -67,13 +70,10 @@ root_dir = opt.dataset#"../PathTracer/build"
 conditional_names = ["outputs", "direct", "depth", "normals", "albedo"]
 
 # some higher resolution images
-#root_dir = "../path_tracer/raytracingtherestofyourlife/dataset/"
-train_dir = join(os.path.join(root_dir ,opt.dataset), "train")
-test_dir = join(os.path.join(root_dir , opt.dataset), "val")
-
-train_set = AdiosDataLoader(opt.dataset,split="train") #DataLoaderHelper(train_dir)
-val_set = AdiosDataLoader(opt.dataset, split="val") #DataLoaderHelper(test_dir)
-test_set = AdiosDataLoader(opt.dataset, split="test")
+proj_read_dir =  os.path.join(os.environ["PROJWORK"],"csc143","samlev","data")
+train_set = AdiosDataLoader( os.path.join(proj_read_dir, opt.dataset),split="train") #DataLoaderHelper(train_dir)
+val_set = AdiosDataLoader(  os.path.join(proj_read_dir, opt.dataset), split="val") #DataLoaderHelper(test_dir)
+test_set = AdiosDataLoader(  os.path.join(proj_read_dir, opt.dataset), split="test")
 
 batch_size = opt.train_batch_size
 n_epoch = opt.n_epoch
@@ -240,20 +240,20 @@ def train(epoch):
             ))
 
 def save_checkpoint(epoch):
-    if not os.path.exists("checkpoint"):
-        os.mkdir("checkpoint")
-    if not os.path.exists(os.path.join("checkpoint", opt.dataset.split('/')[-1])):
-        os.mkdir(os.path.join("checkpoint", opt.dataset.split('/')[-1]))
-    net_g_model_out_path = "checkpoint/{}/netG_model_epoch_{}.pth".format(opt.dataset.split('/')[-1], epoch)
-    net_d_model_out_path = "checkpoint/{}/netD_model_epoch_{}.pth".format(opt.dataset.split('/')[-1], epoch)
+    if not os.path.exists(os.path.join(proj_write_dir,"checkpoint")):
+        os.mkdir(os.path.join(proj_write_dir,"checkpoint"))
+    if not os.path.exists(os.path.join(proj_write_dir, "checkpoint", opt.dataset.split('/')[-1])):
+        os.mkdir(os.path.join(proj_write_dir,"checkpoint", opt.dataset.split('/')[-1]))
+    net_g_model_out_path = os.path.join(proj_write_dir,"checkpoint/{}/netG_model_epoch_{}.pth".format(opt.dataset.split('/')[-1], epoch))
+    net_d_model_out_path = os.path.join(proj_write_dir,"checkpoint/{}/netD_model_epoch_{}.pth".format(opt.dataset.split('/')[-1], epoch))
     torch.save({'epoch':epoch+1, 'state_dict_G': netG.state_dict(), 'optimizer_G':optimizerG.state_dict()}, net_g_model_out_path)
     torch.save({'state_dict_D': netD.state_dict(), 'optimizer_D':optimizerD.state_dict()}, net_d_model_out_path)
-    print("Checkpoint saved to {}".format("checkpoint" + opt.dataset.split('/')[-1]))
+    print("Checkpoint saved to {}".format("checkpoint" + os.path.join(proj_write_dir,opt.dataset).split('/')[-1]))
 
-    if not os.path.exists("validation"):
-        os.mkdir("validation")
-    if not os.path.exists(os.path.join("validation", opt.dataset.split('/')[-1])):
-        os.mkdir(os.path.join("validation", opt.dataset.split('/')[-1]))
+    if not os.path.exists(os.path.join(proj_write_dir,"validation")):
+        os.mkdir(os.path.join(proj_write_dir,"validation"))
+    if not os.path.exists(os.path.join(proj_write_dir, "validation", opt.dataset.split('/')[-1])):
+        os.mkdir(os.path.join(proj_write_dir,"validation", opt.dataset.split('/')[-1]))
 
     for index, images in enumerate(val_data):
         (albedo_cpu, direct_cpu, normal_cpu, depth_cpu, gt_cpu) = (images[0], images[1], images[2], images[3], images[4])
@@ -265,16 +265,27 @@ def save_checkpoint(epoch):
         out = netG(torch.cat((albedo, direct, normal, depth), 1))
         out = out.cpu()
         out_img = out.data[0]
-        save_image_adios(out_img,"validation/{}/{}_Fake.bp".format(opt.dataset.split('/')[-1], index),opt.image_width, opt.image_height, out_img.shape[0])
-        save_image_adios(gt_cpu[0], "validation/{}/{}_Real.bp".format(opt.dataset.split('/')[-1], index),opt.image_width, opt.image_height,  out_img.shape[0])
-        save_image_adios(direct_cpu[0],"validation/{}/{}_Direct.bp".format(opt.dataset.split('/')[-1], index),opt.image_width, opt.image_height,  out_img.shape[0])
+        save_image_adios(out_img, os.path.join(proj_write_dir,"validation/{}/{}_Fake.bp".format(opt.dataset.split('/')[-1], index)), opt.image_width, opt.image_height, out_img.shape[0])
+        save_image_adios(gt_cpu[0], os.path.join(proj_write_dir, "validation/{}/{}_Real.bp".format(opt.dataset.split('/')[-1], index)), opt.image_width, opt.image_height,  out_img.shape[0])
+        save_image_adios(direct_cpu[0], os.path.join(proj_write_dir, "validation/{}/{}_Direct.bp".format(opt.dataset.split('/')[-1], index)) ,opt.image_width, opt.image_height,  out_img.shape[0])
 
 
 
-
+#time profiling
+time0 = time.time()
 
 for epoch in range(n_epoch):
     train(epoch+lastEpoch)
     if epoch % 5 == 0:
         save_checkpoint(epoch+lastEpoch)
-
+        # time profiling
+        # profiling and logging                                                    
+        filename = 'time_profiling.txt'
+        filename = os.path.join(proj_write_dir, filename)
+        if os.path.exists(filename):
+            append_write = 'a' # append if already exists                       
+        else:
+            append_write = 'w' # make a new file if not                        
+        tlog = open(filename,append_write)
+        tlog.write(time0 - time.time())
+        tlog.close()
