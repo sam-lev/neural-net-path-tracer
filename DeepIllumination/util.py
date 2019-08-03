@@ -65,20 +65,24 @@ def save_image(image, filename):
     print ("Image saved as {}".format(filename))
 
 def save_image_adios(image, filename, nx, ny, depth):
+    comm = MPI.COMM_WORLD
+    rnk = comm.Get_rank()
+    sz = comm.Get_size()
+    
     if depth == 1:
-        shape = [nx,ny]
-        start = [0,0]
+        shape = [sz*nx,ny]
+        start = [rnk*0,0]
         count = [nx,ny]
     else:
-        shape = [nx,ny,depth]
-        start = [0,0,0]
+        shape = [sz*nx,ny,depth]
+        start = [rnk*0,0,0]
         count = [nx,ny,depth]
         save_mode = "RGB"
     
     image = image.numpy()
     image = image.clip(0, 255)
     image = np.transpose(image, (1, 2, 0))
-    comm = MPI.COMM_WORLD
+    
     
     # with-as will call adios2.close on fh at the end
     with a2.open(filename, "w",comm) as fw: #, comm)
@@ -130,19 +134,18 @@ def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, 
         print("No File Provided")
     if conditional not in ["direct", "depth", "normals", "albedo", "trace","outputs"]:
         print("Sample must be one of ",["direct", "depth", "normal", "albedo", "trace"], " but was given ", conditional)
-    #if filename == "trace":
-    #    filename="outputs"
     comm = MPI.COMM_WORLD
     rnk = comm.Get_rank()
-    
+    sz = comm.Get_size()
+
     if conditional =="depth":   
-        shape = [width, height]
-        start = [0]
+        shape = [sz*width, height]
+        start = [rnk*0] #[0]
         count = [width*height]
         save_mode = "L"
     else:
-        shape = [width, height,4]
-        start = [0]
+        shape = [sz*width, height,4]
+        start = [rnk*0]
         count = [width*height*4]
         save_mode = "RGB" #remove alpha in translate
 
@@ -153,14 +156,16 @@ def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, 
     name_image = {}
     im_count = 0
     view = False
-    #if rnk == 0:
-    with a2.open(filename, "r",  MPI.COMM_SELF) as bundle: #mpi here when included
+    
+    if( rnk == 0 ):
+        #with a2.open(filename, "r",  MPI.COMM_SELF) as bundle: #mpi here when included
+        bundle = a2.open(filename, "r",  MPI.COMM_SELF) 
         for imgs in bundle:
             im = imgs.available_variables()
             for name, attributes in im.items():
                 #print("name: ", name)
                 image_names.append(name)
-
+                
                 """ For Testing: """
                 #for key, value in attributes.items():
                 #    print("\t" + key + ": " + value)
@@ -174,12 +179,12 @@ def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, 
                 sample = translate(IMAGE,
                                    samplecount=sample_count,
                                    buffer_type=conditional,
-                                  shape=shape,
+                                   shape=shape,
                                    mode=save_mode
                                    ,show = view)
                 image_samples.append(sample)
                 name_image[name] = sample
-    bundle.close()
+        bundle.close()
     return (image_names, name_image)#image_samples)
 
 def load_adios_image(image_name, conditional, filename=None, width=256, height=256, sample_count = 300):
@@ -200,18 +205,18 @@ def load_adios_image(image_name, conditional, filename=None, width=256, height=2
         count = [width*height*4]
         save_mode = "RGB"
     
-    #MPI
-    comm = MPI.COMM_WORLD
-    rnk = comm.Get_rank()
-    sz = comm.Get_size()
+    ##MPI
+    #comm = MPI.COMM_WORLD
+    #rnk = comm.Get_rank()
+    #sz = comm.Get_size()
     
     #print("#########################  ", conditional, " ######")
     IMAGE =  None#np.zeros(count, dtype=np.float32)
     test_view = ""
     image_samples = []
     image_names = []
-    
-    with a2.open(filename, "r", MPI.COMM_SELF) as bundle: #mpi here when included
+    #MPI.COMM_SELF)  
+    with a2.open(filename, "r",MPI.COMM_SELF)  as bundle: #mpi here when included
         for imgs in bundle:
             im = imgs.available_variables()
             for name, attributes in im.items():

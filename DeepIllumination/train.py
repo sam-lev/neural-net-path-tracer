@@ -1,3 +1,4 @@
+from mpi4py import MPI
 import os
 from os.path import join
 import argparse
@@ -93,13 +94,19 @@ netG.apply(dynamic_weights_init)
 netD = D(opt.n_channel_input*4, opt.n_channel_output, opt.n_discriminator_filters)
 netD.apply(weights_init)
 
+world_size = 6
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+n = torch.cuda.device_count() // world_size
 # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #model = Model(input_size, output_size)
 if torch.cuda.device_count() > 1:
   print("Let's use", torch.cuda.device_count(), "GPUs!")
   ### dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-  netG = nn.DataParallel(netG)
-  netD = nn.DataParallel(netD)
+  # rank 2 uses GPUs [4, 5, 6, 7].
+  device_ids = list(range(rank * n, (rank + 1) * n))
+  netG = nn.DataParallel(netG.to(device_ids[0]))
+  netD = nn.DataParallel(netD.to(device_ids[0]))
 
 #assign neural networks to parralelised GPUS
 #netG.to(device)
