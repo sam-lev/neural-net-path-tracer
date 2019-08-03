@@ -46,6 +46,17 @@ parser.add_argument('--seed', type=int, default=123, help='random seed')
 parser.add_argument('--lamda', type=int, default=260, help='L1 regularization factor')
 opt = parser.parse_args()
 
+# profiling and logging
+filename = 'run_log.txt'
+if os.path.exists(filename):
+    append_write = 'a' # append if already exists
+else:
+    append_write = 'w' # make a new file if not
+
+log = open(filename,append_write)
+log.write(" Beginning Training..............")
+log.close()
+
 cudnn.benchmark = True
 
 torch.cuda.manual_seed(opt.seed)
