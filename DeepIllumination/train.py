@@ -1,4 +1,4 @@
-from mpi4py import MPI
+#from mpi4py import MPI
 import os
 from os.path import join
 import argparse
@@ -8,10 +8,14 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
+import torch.distributed as dist
+import torch.multiprocessing as mp
 
 from data import DataLoaderHelper, AdiosDataLoader
 
 from torch.utils.data import DataLoader
+import torch.utils.data.distributed
+
 from torch.autograd import Variable
 from model import G, D, weights_init, dynamic_weights_init
 from util import load_image, save_image, read_adios_bp, save_image_adios
@@ -47,6 +51,10 @@ parser.add_argument('--workers', type=int, default=4, help='number of threads fo
 parser.add_argument('--seed', type=int, default=123, help='random seed')
 #increased from 170 to penalize generator for not being nearer
 parser.add_argument('--lamda', type=int, default=260, help='L1 regularization factor')
+parser.add_argument('--nGPU', type=int, help='numbr of gpu to distribute between both neural net models')
+parser.add_argument('--gpu_per_node', type=int, help='number GPU within each node')
+parser.add_argument('--multiprocess_distributed', default=0, help='multi process parallel training distributed across nGPU between both neural network models. Requires nGPU and gpu_per_node arguments')
+parser.add_argument('--world_size', type=int, default=-1, help='number of communications')
 opt = parser.parse_args()
 
 # profiling and logging
@@ -56,16 +64,40 @@ if os.path.exists(filename):
     append_write = 'a' # append if already exists
 else:
     append_write = 'w' # make a new file if not
-
+print('Run log written to: ',os.path.join(proj_write_dir,filename))
 log = open(os.path.join(proj_write_dir,filename),append_write)
 log.write(" Beginning Training..............")
+#log.write("WORLD SIZE: "+str(os.environ["WORLD_SIZE"])))
 log.close()
 
-cudnn.benchmark = True
+#cuda auto-tuner to find best algorithm given hardware
+#cudnn.benchmark = True
 
+# sets seed of random number generator to make
+# the results will be reproducible.
 torch.cuda.manual_seed(opt.seed)
+print('You have chosen to seed training. ',
+      'seeding the random number generator allows reproducable results ',
+      'This will turn on the CUDNN deterministic setting, ',
+      'which can slow down your training considerably! ',
+      'You may see unexpected behavior when restarting ',
+      'from checkpoints.')
 
 print('=> Loading datasets')
+
+if opt.multiprocess_distributed:
+    # Since we have ngpus_per_node processes per node, the total world_size
+    # needs to be adjusted accordingly
+    #comm = MPI.COMM_WORLD
+    #rank = comm.Get_rank()
+    #size = comm.Get_size()
+    if opt.world_size == -1:
+        opt.world_size = int(os.environ["WORLD_SIZE"])
+    opt.gpu_per_node = torch.cuda.device_count()
+    opt.world_size = opt.gpu_per_node * opt.world_size
+    #mp.spawn(build_model, nprocs=opt.gpu_per_node, args=(opt.gpu_per_node, opt))
+#else:
+#    build_model(opt.nGPU, opt.gpu_per_node)    
 
 root_dir = opt.dataset#"../PathTracer/build"
 conditional_names = ["outputs", "direct", "depth", "normals", "albedo"]
@@ -86,35 +118,40 @@ test_data = DataLoader(dataset=test_set, num_workers=opt.workers, batch_size=opt
 
 print('=> Building model')
 
-# specify gpus to use for data parallelism
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 netG = G(opt.n_channel_input*4, opt.n_channel_output, opt.n_generator_filters)
 netG.apply(dynamic_weights_init)
 netD = D(opt.n_channel_input*4, opt.n_channel_output, opt.n_discriminator_filters)
 netD.apply(weights_init)
 
-world_size = 6
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-n = torch.cuda.device_count() // world_size
-# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-#model = Model(input_size, output_size)
+# specify gpus to use for data parallelism
+def split_gpu(devices):
+    split = len(devices)//2
+    return devices[:split], devices[split:]
+
+
+
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device_ids_netG, device_ids_netD = [] , []
 if torch.cuda.device_count() > 1:
-  print("Let's use", torch.cuda.device_count(), "GPUs!")
-  ### dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-  # rank 2 uses GPUs [4, 5, 6, 7].
-  device_ids = list(range(rank * n, (rank + 1) * n))
-  netG = nn.DataParallel(netG.to(device_ids[0]))
-  netD = nn.DataParallel(netD.to(device_ids[0]))
+    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    device_ids_netG, device_ids_netD = split_gpu(list(range( torch.cuda.device_count() )))
+    #n = torch.cuda.device_count() // world_size
+    # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+    #device_ids = list(range(rank * n, (rank + 1) * n))
+    ##torch.nn.parallel.DistributedDataParallel(
+    netG = nn.DataParallel(netG)#, device_ids=device_ids_netG)
+    netD = nn.DataParallel(netD)#, device_ids=device_ids_netD)
+else:
+    print("Using ",torch.cuda.device_count(), " GPU.")
+    netG = nn.DataParallel(netG)#.to(deviceG)
+    netD = nn.DataParallel(netD)#.to(deviceD)
+    #netG = torch.nn.parallel.DistributedDataParallel(netG)
 
-#assign neural networks to parralelised GPUS
-#netG.to(device)
-#netD.to(device)
+netD.to(device)
+netG.to(device)
 
-#criterion = nn.BCELoss().to(device)
-#criterion_l1 = nn.L1Loss().to(device)
-
+criterion = nn.BCELoss().to(device)
+criterion_l1 = nn.L1Loss().to(device) # to use multiple gpu among multipl model
 
 albedo = torch.FloatTensor(opt.train_batch_size, opt.n_channel_input, 256, 256)
 direct = torch.FloatTensor(opt.train_batch_size, opt.n_channel_input, 256, 256)
@@ -127,11 +164,13 @@ label = torch.FloatTensor(opt.train_batch_size)
 fake_label = 0.1#numpy.random.uniform(0. , 0.1)
 real_label = 0.9# numpy.random.uniform(0.9, 1.0)
 
-netD = netD.to(device)#.cuda()
-netG = netG.to(device)#.cuda()
-criterion = criterion.to(device)#.cuda()
-criterion_l1 = criterion_l1.to(device)#.cuda()
 
+#for multigpu multimodel assign gpu to whole model
+# with model already assigned to gpu devices.
+# data parrallel later
+
+criterion = criterion.to(device)#.cuda()   
+criterion_l1 = criterion_l1.to(device)#.cuda()
 
 albedo = albedo.to(device)#.cuda()
 direct = direct.to(device)#.cuda()
@@ -150,6 +189,7 @@ label = Variable(label)
 
 optimizerD = optim.Adam(netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
 optimizerG = optim.Adam(netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+
 lastEpoch = 0
 
 if opt.resume_G:

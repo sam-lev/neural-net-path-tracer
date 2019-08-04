@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-from mpi4py import MPI
+# from mpi4py import MPI
 import numpy as np
 #from scipy.misc import imread, imresize, imsave
 import torch
@@ -65,9 +65,9 @@ def save_image(image, filename):
     print ("Image saved as {}".format(filename))
 
 def save_image_adios(image, filename, nx, ny, depth):
-    comm = MPI.COMM_WORLD
-    rnk = comm.Get_rank()
-    sz = comm.Get_size()
+    #comm = MPI.COMM_WORLD
+    #rnk = comm.Get_rank()
+    #sz = comm.Get_size()
     
     if depth == 1:
         shape = [sz*nx,ny]
@@ -85,7 +85,7 @@ def save_image_adios(image, filename, nx, ny, depth):
     
     
     # with-as will call adios2.close on fh at the end
-    with a2.open(filename, "w",comm) as fw: #, comm)
+    with a2.open(filename, "w") as fw: #, comm)
         
         fw.write(filename, image, shape, start, count)#, end_step=True)
       
@@ -134,18 +134,19 @@ def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, 
         print("No File Provided")
     if conditional not in ["direct", "depth", "normals", "albedo", "trace","outputs"]:
         print("Sample must be one of ",["direct", "depth", "normal", "albedo", "trace"], " but was given ", conditional)
-    comm = MPI.COMM_WORLD
-    rnk = comm.Get_rank()
-    sz = comm.Get_size()
+
+    #comm = MPI.COMM_WORLD
+    #rnk = comm.Get_rank()
+    #sz = comm.Get_size()
 
     if conditional =="depth":   
-        shape = [sz*width, height]
-        start = [rnk*0] #[0]
+        shape = [width, height]
+        start = [0] #[0]
         count = [width*height]
         save_mode = "L"
     else:
-        shape = [sz*width, height,4]
-        start = [rnk*0]
+        shape = [width, height,4]
+        start = [0]
         count = [width*height*4]
         save_mode = "RGB" #remove alpha in translate
 
@@ -157,9 +158,9 @@ def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, 
     im_count = 0
     view = False
     
-    if( rnk == 0 ):
+    if( 1 ): # set to rnk==0 for mpi
         #with a2.open(filename, "r",  MPI.COMM_SELF) as bundle: #mpi here when included
-        bundle = a2.open(filename, "r",  MPI.COMM_SELF) 
+        bundle = a2.open(filename, "r")#,  MPI.COMM_SELF) 
         for imgs in bundle:
             im = imgs.available_variables()
             for name, attributes in im.items():
@@ -216,7 +217,7 @@ def load_adios_image(image_name, conditional, filename=None, width=256, height=2
     image_samples = []
     image_names = []
     #MPI.COMM_SELF)  
-    with a2.open(filename, "r",MPI.COMM_SELF)  as bundle: #mpi here when included
+    with a2.open(filename, "r")  as bundle: #mpi here when included
         for imgs in bundle:
             im = imgs.available_variables()
             for name, attributes in im.items():
