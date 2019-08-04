@@ -91,13 +91,14 @@ if opt.multiprocess_distributed:
     #comm = MPI.COMM_WORLD
     #rank = comm.Get_rank()
     #size = comm.Get_size()
-    if opt.world_size == -1:
-        opt.world_size = int(os.environ["WORLD_SIZE"])
+    #if opt.world_size == -1:
+    #    opt.world_size = int(os.environ["WORLD_SIZE"])
     opt.gpu_per_node = torch.cuda.device_count()
     opt.world_size = opt.gpu_per_node * opt.world_size
     #mp.spawn(build_model, nprocs=opt.gpu_per_node, args=(opt.gpu_per_node, opt))
 #else:
 #    build_model(opt.nGPU, opt.gpu_per_node)    
+
 
 root_dir = opt.dataset#"../PathTracer/build"
 conditional_names = ["outputs", "direct", "depth", "normals", "albedo"]
@@ -137,20 +138,22 @@ device_ids_netG, device_ids_netD = [] , []
 if torch.cuda.device_count() > 1:
     print("Let's use", torch.cuda.device_count(), "GPUs!")
     device_ids_netG, device_ids_netD = split_gpu(list(range( torch.cuda.device_count() )))
+    node_gpus = list(range( torch.cuda.device_count()))
     #n = torch.cuda.device_count() // world_size
     # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
     #device_ids = list(range(rank * n, (rank + 1) * n))
     ##torch.nn.parallel.DistributedDataParallel(
-    netG = nn.DataParallel(netG)#, device_ids=device_ids_netG)
-    netD = nn.DataParallel(netD)#, device_ids=device_ids_netD)
+                          
+    netG = nn.DataParallel(netG, device_ids=node_gpus, dim=0)
+    netD = nn.DataParallel(netD, device_ids=node_gpus, dim=1)
 else:
     print("Using ",torch.cuda.device_count(), " GPU.")
     netG = nn.DataParallel(netG)#.to(deviceG)
     netD = nn.DataParallel(netD)#.to(deviceD)
     #netG = torch.nn.parallel.DistributedDataParallel(netG)
 
-netD.to(device)
-netG.to(device)
+#netD.to(device)
+#netG.to(device)
 
 criterion = nn.BCELoss().to(device)
 criterion_l1 = nn.L1Loss().to(device) # to use multiple gpu among multipl model
