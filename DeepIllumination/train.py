@@ -48,7 +48,7 @@ parser.add_argument('--cuda', action='store_true', help='cuda')
 parser.add_argument('--resume_G', help='resume G')
 parser.add_argument('--resume_D', help='resume D')
 parser.add_argument('--workers', type=int, default=4, help='number of threads for data loader')
-parser.add_argument('--seed', type=int, default=123, help='random seed')
+parser.add_argument('--seed', type=int, default=666, help='random seed')
 #increased from 170 to penalize generator for not being nearer
 parser.add_argument('--lamda', type=int, default=260, help='L1 regularization factor')
 parser.add_argument('--nGPU', type=int, help='numbr of gpu to distribute between both neural net models')
@@ -67,7 +67,7 @@ else:
 print('Run log written to: ',os.path.join(proj_write_dir,filename))
 log = open(os.path.join(proj_write_dir,filename),append_write)
 log.write(" Beginning Training..............")
-#log.write("WORLD SIZE: "+str(os.environ["WORLD_SIZE"])))
+log.write("WORLD SIZE: "+str(os.environ["WORLD_SIZE"])))
 log.close()
 
 #cuda auto-tuner to find best algorithm given hardware
@@ -95,128 +95,130 @@ if opt.multiprocess_distributed:
     #    opt.world_size = int(os.environ["WORLD_SIZE"])
     opt.gpu_per_node = torch.cuda.device_count()
     opt.world_size = opt.gpu_per_node * opt.world_size
-    #mp.spawn(build_model, nprocs=opt.gpu_per_node, args=(opt.gpu_per_node, opt))
-#else:
-#    build_model(opt.nGPU, opt.gpu_per_node)    
-
-
-root_dir = opt.dataset#"../PathTracer/build"
-conditional_names = ["outputs", "direct", "depth", "normals", "albedo"]
-
-# some higher resolution images
-proj_read_dir =  os.path.join(os.environ["PROJWORK"],"csc143","samlev","data")
-train_set = AdiosDataLoader( os.path.join(proj_read_dir, opt.dataset),split="train") #DataLoaderHelper(train_dir)
-val_set = AdiosDataLoader(  os.path.join(proj_read_dir, opt.dataset), split="val") #DataLoaderHelper(test_dir)
-test_set = AdiosDataLoader(  os.path.join(proj_read_dir, opt.dataset), split="test")
-
-batch_size = opt.train_batch_size
-n_epoch = opt.n_epoch
-
-# num_workers=opt.workers,
-# Change if used in paper!
-train_data = DataLoader(dataset=train_set, batch_size=opt.train_batch_size, shuffle=True)
-val_data = DataLoader(dataset=val_set,  batch_size=opt.test_batch_size, shuffle=False)
-test_data = DataLoader(dataset=test_set, batch_size=opt.test_batch_size, shuffle=False)
-
-
-print('=> Building model')
-
-netG = G(opt.n_channel_input*4, opt.n_channel_output, opt.n_generator_filters)
-netG.apply(dynamic_weights_init)
-netD = D(opt.n_channel_input*4, opt.n_channel_output, opt.n_discriminator_filters)
-netD.apply(weights_init)
-
-# specify gpus to use for data parallelism
-def split_gpu(devices):
-    split = len(devices)//2
-    return devices[:split], devices[split:]
-
-
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device_ids_netG, device_ids_netD = [] , []
-if torch.cuda.device_count() > 1:
-    print("Let's use", torch.cuda.device_count(), "GPUs!")
-    device_ids_netG, device_ids_netD = split_gpu(list(range( torch.cuda.device_count() )))
-    node_gpus = list(range( torch.cuda.device_count()))
-    #n = torch.cuda.device_count() // world_size
-    # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-    #device_ids = list(range(rank * n, (rank + 1) * n))
-    ##torch.nn.parallel.DistributedDataParallel(
-                          
-    netG = nn.DataParallel(netG, device_ids=node_gpus, dim=0)
-    netD = nn.DataParallel(netD, device_ids=node_gpus, dim=1)
+    mp.spawn(build_model, nprocs=opt.gpu_per_node, args=(opt.gpu_per_node, opt))
 else:
-    print("Using ",torch.cuda.device_count(), " GPU.")
-    netG = nn.DataParallel(netG)#.to(deviceG)
-    netD = nn.DataParallel(netD)#.to(deviceD)
-    #netG = torch.nn.parallel.DistributedDataParallel(netG)
+    build_model(opt.gpu_per_node, opt.gpu_per_node)    
 
-#netD.to(device)
-#netG.to(device)
+def build_model(gpu, gpu_per_node, args):
+    root_dir = opt.dataset#"../PathTracer/build"
+    conditional_names = ["outputs", "direct", "depth", "normals", "albedo"]
+    
+    # some higher resolution images
+    proj_read_dir =  os.path.join(os.environ["PROJWORK"],"csc143","samlev","data")
+    train_set = AdiosDataLoader( os.path.join(proj_read_dir, opt.dataset),split="train") #DataLoaderHelper(train_dir)
+    val_set = AdiosDataLoader(  os.path.join(proj_read_dir, opt.dataset), split="val") #DataLoaderHelper(test_dir)
+    test_set = AdiosDataLoader(  os.path.join(proj_read_dir, opt.dataset), split="test")
+    
+    batch_size = opt.train_batch_size
+    n_epoch = opt.n_epoch
 
-criterion = nn.BCELoss().to(device)
-criterion_l1 = nn.L1Loss().to(device) # to use multiple gpu among multipl model
-
-albedo = torch.FloatTensor(opt.train_batch_size, opt.n_channel_input, 256, 256)
-direct = torch.FloatTensor(opt.train_batch_size, opt.n_channel_input, 256, 256)
-normal = torch.FloatTensor(opt.train_batch_size, opt.n_channel_input, 256, 256)
-depth = torch.FloatTensor(opt.train_batch_size, opt.n_channel_input, 256, 256)
-
-gt = torch.FloatTensor(opt.train_batch_size, opt.n_channel_output, 256, 256)
-
-label = torch.FloatTensor(opt.train_batch_size)
-fake_label = 0.1#numpy.random.uniform(0. , 0.1)
-real_label = 0.9# numpy.random.uniform(0.9, 1.0)
-
-
-#for multigpu multimodel assign gpu to whole model
-# with model already assigned to gpu devices.
-# data parrallel later
-
-criterion = criterion.to(device)#.cuda()   
-criterion_l1 = criterion_l1.to(device)#.cuda()
-
-albedo = albedo.to(device)#.cuda()
-direct = direct.to(device)#.cuda()
-normal = normal.to(device)#.cuda()
-depth = depth.to(device)#.cuda()
-gt = gt.to(device)#.cuda()
-label = label.to(device)#.cuda()
-
-albedo = Variable(albedo)
-direct = Variable(direct)
-normal = Variable(normal)
-depth = Variable(depth)
-gt = Variable(gt)
-label = Variable(label)
-
-
-optimizerD = optim.Adam(netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
-optimizerG = optim.Adam(netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
-
-lastEpoch = 0
-
-if opt.resume_G:
-    if os.path.isfile(opt.resume_G):
-        print("=> loading generator checkpoint '{}'".format(opt.resume_G))
-        checkpoint = torch.load(opt.resume_G)
-        lastEpoch = checkpoint['epoch']
-        n_epoch = n_epoch - lastEpoch
-        netG.load_state_dict(checkpoint['state_dict_G'])
-        optimizerG.load_state_dict(checkpoint['optimizer_G'])
-        print("=> loaded generator checkpoint '{}' (epoch {})".format(opt.resume_G, checkpoint['epoch']))
-
+    # num_workers=opt.workers,
+    # Change if used in paper!
+    train_data = DataLoader(dataset=train_set, batch_size=opt.train_batch_size, shuffle=True)
+    val_data = DataLoader(dataset=val_set,  batch_size=opt.test_batch_size, shuffle=False)
+    test_data = DataLoader(dataset=test_set, batch_size=opt.test_batch_size, shuffle=False)
+    
+    
+    print('=> Building model')
+    
+    netG = G(opt.n_channel_input*4, opt.n_channel_output, opt.n_generator_filters)
+    netG.apply(dynamic_weights_init)
+    netD = D(opt.n_channel_input*4, opt.n_channel_output, opt.n_discriminator_filters)
+    netD.apply(weights_init)
+    
+    # specify gpus to use for data parallelism
+    def split_gpu(devices):
+        split = len(devices)//2
+        return devices[:split], devices[split:]
+    
+    
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device_ids_netG, device_ids_netD = [] , []
+    if torch.cuda.device_count() > 1:
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        device_ids_netG, device_ids_netD = split_gpu(list(range( torch.cuda.device_count() )))
+        node_gpus = list(range( torch.cuda.device_count()))
+        #n = torch.cuda.device_count() // world_size
+        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+        #device_ids = list(range(rank * n, (rank + 1) * n))
+        netG = torch.nn.parallel.DistributedDataParallel(netG)
+        netD = torch.nn.parallel.DistributedDataParallel(netD)
+        
+        #netG = nn.DataParallel(netG, device_ids=node_gpus, dim=0)
+        #netD = nn.DataParallel(netD, device_ids=node_gpus, dim=1)
     else:
-        print("=> no checkpoint found")
+        print("Using ",torch.cuda.device_count(), " GPU.")
+        #netG = nn.DataParallel(netG)#.to(deviceG)
+        #netD = nn.DataParallel(netD)#.to(deviceD)
+        netG = torch.nn.parallel.DistributedDataParallel(netG)
+        netG = torch.nn.parallel.DistributedDataParallel(netG)
+        
+    #netD.to(device)
+    #netG.to(device)
+    
+    criterion = nn.BCELoss().to(device)
+    criterion_l1 = nn.L1Loss().to(device) # to use multiple gpu among multipl model
+    
+    albedo = torch.FloatTensor(opt.train_batch_size, opt.n_channel_input, 256, 256)
+    direct = torch.FloatTensor(opt.train_batch_size, opt.n_channel_input, 256, 256)
+    normal = torch.FloatTensor(opt.train_batch_size, opt.n_channel_input, 256, 256)
+    depth = torch.FloatTensor(opt.train_batch_size, opt.n_channel_input, 256, 256)
+    
+    gt = torch.FloatTensor(opt.train_batch_size, opt.n_channel_output, 256, 256)
+    
+    label = torch.FloatTensor(opt.train_batch_size)
+    fake_label = 0.1#numpy.random.uniform(0. , 0.1)
+    real_label = 0.9# numpy.random.uniform(0.9, 1.0)
+    
+    
+    #for multigpu multimodel assign gpu to whole model
+    # with model already assigned to gpu devices.
+    # data parrallel later
+    
+    criterion = criterion.to(device)#.cuda()   
+    criterion_l1 = criterion_l1.to(device)#.cuda()
+    
+    albedo = albedo.to(device)#.cuda()
+    direct = direct.to(device)#.cuda()
+    normal = normal.to(device)#.cuda()
+    depth = depth.to(device)#.cuda()
+    gt = gt.to(device)#.cuda()
+    label = label.to(device)#.cuda()
+    
+    albedo = Variable(albedo)
+    direct = Variable(direct)
+    normal = Variable(normal)
+    depth = Variable(depth)
+    gt = Variable(gt)
+    label = Variable(label)
+    
+    
+    optimizerD = optim.Adam(netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+    optimizerG = optim.Adam(netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+    
+    lastEpoch = 0
 
-if opt.resume_D:
-    if os.path.isfile(opt.resume_D):
-        print("=> loading discriminator checkpoint '{}'".format(opt.resume_D))
-        checkpoint = torch.load(opt.resume_D)
-        netD.load_state_dict(checkpoint['state_dict_D'])
-        optimizerD.load_state_dict(checkpoint['optimizer_D'])
-        print("=> loaded discriminator checkpoint '{}'".format(opt.resume_D))
+    if opt.resume_G:
+        if os.path.isfile(opt.resume_G):
+            print("=> loading generator checkpoint '{}'".format(opt.resume_G))
+            checkpoint = torch.load(opt.resume_G)
+            lastEpoch = checkpoint['epoch']
+            n_epoch = n_epoch - lastEpoch
+            netG.load_state_dict(checkpoint['state_dict_G'])
+            optimizerG.load_state_dict(checkpoint['optimizer_G'])
+            print("=> loaded generator checkpoint '{}' (epoch {})".format(opt.resume_G, checkpoint['epoch']))
+            
+        else:
+            print("=> no checkpoint found")
+
+    if opt.resume_D:
+        if os.path.isfile(opt.resume_D):
+            print("=> loading discriminator checkpoint '{}'".format(opt.resume_D))
+            checkpoint = torch.load(opt.resume_D)
+            netD.load_state_dict(checkpoint['state_dict_D'])
+            optimizerD.load_state_dict(checkpoint['optimizer_D'])
+            print("=> loaded discriminator checkpoint '{}'".format(opt.resume_D))
 
 # adjust loss, weights, bias based on Fresnel and stokes theorem
 # for identifying refracted light
