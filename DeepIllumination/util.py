@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# from mpi4py import MPI
+ from mpi4py import MPI
 import numpy as np
 #from scipy.misc import imread, imresize, imsave
 import torch
@@ -135,9 +135,9 @@ def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, 
     if conditional not in ["direct", "depth", "normals", "albedo", "trace","outputs"]:
         print("Sample must be one of ",["direct", "depth", "normal", "albedo", "trace"], " but was given ", conditional)
 
-    #comm = MPI.COMM_WORLD
-    #rnk = comm.Get_rank()
-    #sz = comm.Get_size()
+    comm = MPI.COMM_WORLD
+    rnk = comm.Get_rank()
+    sz = comm.Get_size()
 
     if conditional =="depth":   
         shape = [width, height]
@@ -158,9 +158,9 @@ def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, 
     im_count = 0
     view = False
     
-    if( 1 ): # set to rnk==0 for mpi
+    if( rnk==0 ): # set to rnk==0 for mpi
         #with a2.open(filename, "r",  MPI.COMM_SELF) as bundle: #mpi here when included
-        bundle = a2.open(filename, "r")#,  MPI.COMM_SELF) 
+        bundle = a2.open(filename, "r",  MPI.COMM_SELF) 
         for imgs in bundle:
             im = imgs.available_variables()
             for name, attributes in im.items():
