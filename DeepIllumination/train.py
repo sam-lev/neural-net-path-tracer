@@ -111,9 +111,11 @@ test_set = AdiosDataLoader(  os.path.join(proj_read_dir, opt.dataset), split="te
 batch_size = opt.train_batch_size
 n_epoch = opt.n_epoch
 
-train_data = DataLoader(dataset=train_set, num_workers=opt.workers, batch_size=opt.train_batch_size, shuffle=True)
-val_data = DataLoader(dataset=val_set, num_workers=opt.workers, batch_size=opt.test_batch_size, shuffle=False)
-test_data = DataLoader(dataset=test_set, num_workers=opt.workers, batch_size=opt.test_batch_size, shuffle=False)
+# num_workers=opt.workers,
+# Change if used in paper!
+train_data = DataLoader(dataset=train_set, batch_size=opt.train_batch_size, shuffle=True)
+val_data = DataLoader(dataset=val_set,  batch_size=opt.test_batch_size, shuffle=False)
+test_data = DataLoader(dataset=test_set, batch_size=opt.test_batch_size, shuffle=False)
 
 
 print('=> Building model')
@@ -130,7 +132,7 @@ def split_gpu(devices):
 
 
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 device_ids_netG, device_ids_netD = [] , []
 if torch.cuda.device_count() > 1:
     print("Let's use", torch.cuda.device_count(), "GPUs!")
