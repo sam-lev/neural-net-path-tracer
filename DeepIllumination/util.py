@@ -141,13 +141,13 @@ def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, 
 
     if conditional =="depth":   
         shape = [width, height]
-        start = [0] #[0]
-        count = [width*height]
+        start = [0,0] #[0]
+        count = [width,height]
         save_mode = "L"
     else:
         shape = [width, height,4]
-        start = [0]
-        count = [width*height*4]
+        start = [0,0,0]
+        count = [width,height,4]
         save_mode = "RGB" #remove alpha in translate
 
     print("LOADING: ", conditional, " ... ")
