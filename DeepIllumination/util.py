@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/ccs/home/samlev/anaconda3/bin/python3.7
 from mpi4py import MPI
 import numpy as np
 #from scipy.misc import imread, imresize, imsave
@@ -70,12 +70,12 @@ def save_image_adios(image, filename, nx, ny, depth):
     #sz = comm.Get_size()
     
     if depth == 1:
-        shape = [sz*nx,ny]
-        start = [rnk*0,0]
+        shape = [nx,ny]
+        start = [0,0]
         count = [nx,ny]
     else:
-        shape = [sz*nx,ny,depth]
-        start = [rnk*0,0,0]
+        shape = [nx,ny,depth]
+        start = [0,0,0]
         count = [nx,ny,depth]
         save_mode = "RGB"
     
