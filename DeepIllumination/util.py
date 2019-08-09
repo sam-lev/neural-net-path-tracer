@@ -64,7 +64,7 @@ def save_image(image, filename):
     imsave(filename, image)
     print ("Image saved as {}".format(filename))
 
-def save_image_adios(image, filename, nx, ny, depth):
+def save_image_adios(image, filename, nx, ny, depth, as_bp=True):
     #comm = MPI.COMM_WORLD
     #rnk = comm.Get_rank()
     #sz = comm.Get_size()
@@ -141,13 +141,13 @@ def read_adios_bp(filename=None, conditional = "direct", width=256, height=256, 
 
     if conditional =="depth":   
         shape = [width, height]
-        start = [0,0] #[0]
-        count = [width,height]
+        start = [0] #[0]
+        count = [width*height]
         save_mode = "L"
     else:
         shape = [width, height,4]
-        start = [0,0,0]
-        count = [width,height,4]
+        start = [0]
+        count = [width*height*4]
         save_mode = "RGB" #remove alpha in translate
 
     print("LOADING: ", conditional, " ... ")

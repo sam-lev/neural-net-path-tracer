@@ -48,7 +48,7 @@ parser.add_argument('--beta1', type=float, default=0.4, help='beta1')
 parser.add_argument('--cuda', action='store_true', help='cuda')
 parser.add_argument('--resume_G', help='resume G')
 parser.add_argument('--resume_D', help='resume D')
-parser.add_argument('--workers', type=int, default=4, help='number of threads for data loader')
+parser.add_argument('--workers', type=int, default=0, help='number of threads for data loader')
 parser.add_argument('--seed', type=int, default=666, help='random seed')
 #increased from 170 to penalize generator for not being nearer
 parser.add_argument('--lamda', type=int, default=260, help='L1 regularization factor')
@@ -56,13 +56,13 @@ parser.add_argument('--nGPU', type=int, help='numbr of gpu to distribute between
 parser.add_argument('--gpu', type=int, help='if manually assigning a gpu (not parallel)')
 parser.add_argument('--gpu_per_node', type=int, help='number GPU within each node')
 parser.add_argument('--multiprocess_distributed', type=int, default=0, help='multi process parallel training distributed across nGPU between both neural network models. Requires nGPU and gpu_per_node arguments')
-parser.add_argument('--world_size', type=int, default=2, help='number of nodes')
+parser.add_argument('--world_size', type=int, default=1, help='number of nodes')
 parser.add_argument('--rank', type=int, default=0, help='node used for distributed training')
 parser.add_argument('--dist_backend', default='mpi', type=str,
                     help='distributed backend')
 opt = parser.parse_args()
 
-run_name = "mp"
+run_name = "dataparallel"
 # adjust loss, weights, bias based on Fresnel and stokes theorem
 # for identifying refracted light
 
@@ -83,6 +83,7 @@ run_name = "mp"
 #could do monte-carlo esque adaption where noise (gaussian blur) is added
 # randomly to images given to the discriminator ( e.g. np.rand(0,1) < 0.2)
 # randomly interject real images of simple shapes to capture shading
+
 
 def train(epoch
           , train_data
@@ -146,19 +147,16 @@ def init():
     
     log.write(" Beginning Training..............")
     
-    #cuda auto-tuner to find best algorithm given hardware
-    #cudnn.benchmark = True
     
     # sets seed of random number generator to make
-    # the results will be reproducible.
-    
-    torch.cuda.manual_seed(opt.seed)
-    print('You have chosen to seed training. ',
-          'seeding the random number generator allows reproducable results ',
-          'This will turn on the CUDNN deterministic setting, ',
-          'which can slow down your training considerably! ',
-          'You may see unexpected behavior when restarting ',
-          'from checkpoints.')
+    # the results will be reproducible
+    #torch.cuda.manual_seed(opt.seed)
+    #print('You have chosen to seed training. ',
+    #      'seeding the random number generator allows reproducable results ',
+    #      'This will turn on the CUDNN deterministic setting, ',
+    #      'which can slow down your training considerably! ',
+    #      'You may see unexpected behavior when restarting ',
+    #      'from checkpoints.')
 
     opt.gpu_per_node = torch.cuda.device_count()
     
@@ -188,14 +186,14 @@ def init():
         print("...GPUs split into: ", split_gpu(opt.gpu_per_node,opt.world_size-1) )
         print("...World size: ", opt.world_size)
         #q = mp.Queue()
-        #for rank in range(opt.world_size):#range(opt.gpu_per_node):
-        #    opt.rank = rank
-        mp.spawn(build_model, nprocs=ngpus_per_node, args=(ngpus_per_node, args))#
-        #mp.Process(target = build_model, args=(0, split_gpu(opt.gpu_per_node,rank+1), opt))
-        #    world.append(p)
-        #    p.start()
-        #for p in world:
-        #    p.join()
+        for rank in range(opt.world_size):#range(opt.gpu_per_node):
+            opt.rank = rank
+            #mp.spawn(build_model, nprocs=opt.gpu_per_node, args=(opt.gpu_per_node, opt))#
+            p = mp.Process(target = build_model, args=(rank, opt.gpu_per_node, opt))
+            world.append(p)
+            p.start()
+        for p in world:
+            p.join()
     else:
         print("Non-distributed parallelization or one gpu")
         build_model(opt.gpu, opt.gpu_per_node, opt)    
@@ -205,7 +203,15 @@ def build_model(gpu, gpu_per_node, args):
     args.gpu = gpu
     if args.gpu is not None:
         print("Use GPU: {} for training".format(args.gpu))
-        #args.gpu = gpu_per_node
+        log.write("Use GPU: {} for training".format(args.gpu))
+    if not opt.multiprocess_distributed:
+        if torch.cuda.device_count() > 1:
+            opt.world_size = torch.cuda.device_count()    #
+            #args.gpu = gpu_per_node
+    #else:
+    #    if torch.cuda.device_count() > 1:
+    #        gpu = None
+    #        args.gpu = gpu_per_node
     device_G = None
     device_D = None
     device_G_id = None
@@ -219,10 +225,9 @@ def build_model(gpu, gpu_per_node, args):
     
     print('=> Building model')
     
-    netG = G(opt.n_channel_input*4, opt.n_channel_output, opt.n_generator_filters)
-    netG.apply(dynamic_weights_init)
-    netD = D(opt.n_channel_input*4, opt.n_channel_output, opt.n_discriminator_filters)
-    netD.apply(weights_init)
+    if not opt.multiprocess_distributed:
+        netG = G(opt.n_channel_input*4, opt.n_channel_output, opt.n_generator_filters)
+        netD = D(opt.n_channel_input*4, opt.n_channel_output, opt.n_discriminator_filters)
     
     # specify gpus to use for data parallelism
     # setup devices for this process, split 1 uses GPUs [0, 1, 2, 3] and
@@ -233,19 +238,15 @@ def build_model(gpu, gpu_per_node, args):
         return device_ids
     
     
-    
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     device_G, device_D = [] , []
     if args.multiprocess_distributed:
         print("using multi process distributed training")
         print("taining with GPU: ", args.gpu)
         torch.cuda.set_device(args.gpu)
-        #device_G =  split_gpu(args.gpu, 1)
-        #device_D =  split_gpu(args.gpu, 2)
-        #device_G_id = device_G[0]
-        #device_D_id = device_D[0]
-        netG.to(args.gpu)
-        netD.to(args.gpu)#cuda(device_D)
+        
+        #netG.cuda(args.gpu)
+        #netD.cuda(args.gpu)#cuda(device_D)
+        device_G_id = args.gpu
         #
         # strongly distributed
         #args.train_batch_size = int(args.train_batch_size / gpu_per_node)
@@ -256,15 +257,22 @@ def build_model(gpu, gpu_per_node, args):
         print("Let's use", torch.cuda.device_count(), "GPUs!")
         
         node_gpus = list(range( torch.cuda.device_count()))
-        #n = torch.cuda.device_count() // world_size
-        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-        #device_ids = list(range(rank * n, (rank + 1) * n))
-        netG = torch.nn.parallel.DistributedDataParallel(netG 
-                                                         ,device_ids = [args.gpu])#=[args.gpu])
-        netD = torch.nn.parallel.DistributedDataParallel(netD
-                                                         ,device_ids = [args.gpu])#=[args.gpu])
-        #netG = nn.DataParallel(netG, device_ids=node_gpus, dim=0)
-        #netD = nn.DataParallel(netD, device_ids=node_gpus, dim=1)
+
+        gan_process = torch.distributed.new_group(range(dist.get_world_size()))
+        netG = torch.nn.parallel.DistributedDataParallel(G(opt.n_channel_input*4
+                                                           , opt.n_channel_output
+                                                           , opt.n_generator_filters) 
+                                                         ,device_ids = [args.gpu] 
+                                                         ,process_group = gan_process)
+
+        dis_process = torch.distributed.new_group(range(dist.get_world_size()))
+        netD = torch.nn.parallel.DistributedDataParallel(D(opt.n_channel_input*4
+                                                            , opt.n_channel_output
+                                                            , opt.n_discriminator_filters).cuda(args.gpu)
+                                                          ,device_ids = [args.gpu]
+                                                          ,process_group = dis_process)
+        netG.cuda(args.gpu)
+        netD.cuda(args.gpu)
     if gpu is not None:
         print("Setting to ", gpu, " GPU.")
         #torch.cuda.set_device(gpu)
@@ -272,7 +280,7 @@ def build_model(gpu, gpu_per_node, args):
         device_G_id = gpu[0]
         args.gpu = gpu[0]
         netG = nn.DataParallel(netG).to(gpu[0])
-        netD = nn.DataParallel(netD).to(gpu[1])
+        netD = nn.DataParallel(netD).to(gpu[0])
     else:
         if torch.cuda.device_count() > 1:
             opt.world_size = torch.cuda.device_count()
@@ -283,11 +291,13 @@ def build_model(gpu, gpu_per_node, args):
             print("descriminator on gpu ", device_D[0])
             device_G_id = device_G[0]
             device_D_id = device_D[0]
-            args.gpu = device_G[0]
+            #args.gpu = device_G[0]
             #netG.to(device_G[0])#cuda(device_G)                                
-            #netD.to(device_D[0])
-            netG = nn.DataParallel(netG, device_G+device_D).to(device_G[0])#.cuda()
-            netD = nn.DataParallel(netD, device_G+device_D).to(device_G[0])#.cuda()
+            #netD.to(device_G[0])
+            #netG.features = torch.nn.DataParallel(netG.features)
+            #netD.features = torch.nn.DataParallel(netD.features)
+            netG = nn.DataParallel(netG, device_G+device_D).cuda(device_G[0])#.cuda()
+            netD = nn.DataParallel(netD, device_G+device_D).cuda(device_G[0])#.cuda()
         else:
             print("Using device ",torch.cuda.device_count(), " GPU.")
             device_G_id = device
@@ -296,10 +306,11 @@ def build_model(gpu, gpu_per_node, args):
             netD = nn.DataParallel(netD).to(device)
     #netD.to(device)
     #netG.to(device)
+    netG.apply(dynamic_weights_init)
+    netD.apply(weights_init)
     
-    
-    criterion = nn.BCELoss().cuda(device_G_id)#args.gpu)
-    criterion_l1 = nn.L1Loss().cuda(device_G_id)#args.gpu) # to use multiple gpu among multipl model
+    criterion = nn.BCELoss()#.cuda(device_G_id)#args.gpu)
+    criterion_l1 = nn.L1Loss()#.cuda(device_G_id)#args.gpu) # to use multiple gpu among multipl model
 
     #cuda auto-tuner to find best algorithm given hardware
     cudnn.benchmark = True
@@ -317,32 +328,34 @@ def build_model(gpu, gpu_per_node, args):
     
     batch_size = opt.train_batch_size
     n_epoch = opt.n_epoch
-
-    # num_workers=opt.workers,
+    args.workers = 0
+    pin_memory = True
     # Change if used in paper!
     if opt.multiprocess_distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_set)
+        pin_memory = True
         #val_sampler = torch.utils.data.distributed.DistributedSampler(val_set)
         #test_sampler = torch.utils.data.distributed.DistributedSampler(test_set)
     else:
         train_sampler = None
+        pin_memory = False
         
     train_data = DataLoader(dataset=train_set
                             , batch_size=args.train_batch_size
                             ,shuffle=(train_sampler is None)
                             ,num_workers=args.workers
-                            , pin_memory=True
+                            , pin_memory=pin_memory
                             , sampler=train_sampler)
     val_data = DataLoader(dataset=val_set
                           ,num_workers = args.workers
                           , batch_size=opt.test_batch_size
                           , shuffle=False
-                          ,pin_memory=True)
+                          ,pin_memory=pin_memory)
     test_data = DataLoader(dataset=test_set
                            , num_workers = args.workers
                            , batch_size=opt.test_batch_size
                            , shuffle=False
-                           ,pin_memory=True)
+                           ,pin_memory=pin_memory)
     
     
     albedo = torch.FloatTensor(args.train_batch_size, opt.n_channel_input, 256, 256)
@@ -360,7 +373,8 @@ def build_model(gpu, gpu_per_node, args):
     #for multigpu multimodel assign gpu to whole model
     # with model already assigned to gpu devices.
     # data parrallel later
-    if torch.cuda.device_count() == 1:
+    if (torch.cuda.device_count() == 1):# or ((not opt.multiprocess_distributed) and (torch.cuda.device_count() > 1)):
+        print("assigning non threaded data")
         albedo = albedo.to(device_G_id)#.cuda()
         direct = direct.to(device_G_id)#.cuda()
         normal = normal.to(device_G_id)#.cuda()
@@ -368,13 +382,14 @@ def build_model(gpu, gpu_per_node, args):
         gt = gt.to(device_G_id)#.cuda()
         label = label.to(device_G_id)#.cuda()
         
-        albedo = Variable(albedo)
-        direct = Variable(direct)
-        normal = Variable(normal)
-        depth = Variable(depth)
-        gt = Variable(gt)
-        label = Variable(label)
-    else:
+        #albedo = Variable(albedo)
+        #direct = Variable(direct)
+        #normal = Variable(normal)
+        #depth = Variable(depth)
+        #gt = Variable(gt)
+        #label = Variable(label)
+    elif torch.cuda.device_count() > 1:
+        print("assigning distributed data")
         albedo = albedo.to(device_G_id, non_blocking=True)#to(device)#.cuda()
         direct = direct.to(device_G_id, non_blocking=True)#.to(device)#.cuda()
         normal = normal.to(device_G_id, non_blocking=True)#.to(device)#.cuda()
@@ -382,12 +397,12 @@ def build_model(gpu, gpu_per_node, args):
         gt = gt.to(device_G_id, non_blocking=True)#.to(device)#.cuda()
         label = label.to(device_G_id, non_blocking=True)#.to(device)#.cuda()
         
-        albedo = Variable(albedo)
-        direct = Variable(direct)
-        normal = Variable(normal)
-        depth = Variable(depth)
-        gt = Variable(gt)
-        label = Variable(label)
+    albedo = Variable(albedo)
+    direct = Variable(direct)
+    normal = Variable(normal)
+    depth = Variable(depth)
+    gt = Variable(gt)
+    label = Variable(label)
     
     
     optimizerD = optim.Adam(netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
@@ -416,7 +431,18 @@ def build_model(gpu, gpu_per_node, args):
             print("=> loaded discriminator checkpoint '{}'".format(opt.resume_D))
 
     #time profiling
+    # time profiling                                                             
+    # profiling and logging                                                      
+    filename = 'time_profiling_'+run_name+'.txt'
+    filename = os.path.join(proj_write_dir, filename)
+    if os.path.exists(filename):
+        append_write = 'a' # append if already exists                            
+    else:
+        append_write = 'w' # make a new file if not                              
+    tlog = open(filename,append_write)
     time0 = time.time()
+    tlog.write(str(time0))
+    tlog.close()
     
     lastEpoch = 0
     
@@ -436,15 +462,6 @@ def build_model(gpu, gpu_per_node, args):
               , netG, netD
               , criterion, criterion_l1
               , optimizerG, optimizerD)
-
-            # time profiling
-            # profiling and logging                                                    
-            filename = 'time_profiling_'+run_name+'.txt'
-            filename = os.path.join(proj_write_dir, filename)
-            if os.path.exists(filename):
-                append_write = 'a' # append if already exists                       
-            else:
-                append_write = 'w' # make a new file if not                        
             tlog = open(filename,append_write)
             tlog.write(str(time0 - time.time()))
             tlog.close()
@@ -487,7 +504,7 @@ def save_checkpoint(epoch
 
 
 
-filename = "run_log_"+run_name".txt"
+filename = "run_log_"+run_name+".txt"
 proj_write_dir =  os.path.join(os.environ["PROJWORK"],"csc143","samlev")
 if os.path.exists(filename):
     append_write = 'a' # append if already exists                           
